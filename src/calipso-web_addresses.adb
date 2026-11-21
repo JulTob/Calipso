@@ -274,6 +274,45 @@ package body Calipso.Web_Addresses is
         return Other;
         end Kind_By_Label;
 
+    Unknown_Label : constant String := "application/octet-stream";
+
+    function Label_By_Ending (
+            Ending : in String
+            ) return String is
+        begin
+        if Ending = "html" or else Ending = "htm" then
+            return "text/html";
+            end if;
+        if Ending = "txt" then
+            return "text/plain";
+            end if;
+        if Ending = "css" then
+            return "text/css";
+            end if;
+        if Ending = "py" then
+            return "text/x-python";
+            end if;
+        if Ending = "svg" then
+            return "image/svg+xml";
+            end if;
+        if Ending = "png" then
+            return "image/png";
+            end if;
+        if Ending = "jpg" then
+            return "image/jpeg";
+            end if;
+        if Ending = "mp3" then
+            return "audio/mpeg";
+            end if;
+        if Ending = "mp4" then
+            return "video/mp4";
+            end if;
+        if Ending = "pdf" then
+            return "application/pdf";
+            end if;
+        return Unknown_Label;
+        end Label_By_Ending;
+
     function Sense_Of (
             Address : in String;
             Kind    : in Content_Kind

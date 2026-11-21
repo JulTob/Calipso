@@ -6,4 +6,4 @@ authors = ["Julio Toboso"]
 maintainers-logins = ["JulTob"]
 
 project-files = ["calipso.gpr"]
-executables = ["calipso_demo", "calipso_exam", "calipso_brain", "calipso_crawl", "calipso_tests"]
+executables = ["calipso_demo", "calipso_exam", "calipso_brain", "calipso_crawl", "calipso_panel", "calipso_serve", "calipso_tests"]

@@ -90,6 +90,11 @@ package Calipso.Web_Addresses is
             ) return Content_Kind;
     --# Label: what the server says the file is, like "text/html; charset=utf-8".
 
+    function Label_By_Ending (
+            Ending : in String
+            ) return String;
+    --# The label a server sends for a file with this ending: "html" -> "text/html".
+
     function Sense_Of (
             Address : in String;
             Kind    : in Content_Kind

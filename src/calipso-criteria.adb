@@ -22,7 +22,7 @@ package body Calipso.Criteria is
             ) return Long_Float is
         Size : constant Symbol := Model.Alphabet_Size;
         begin
-        if Size <= 1 then
+        if Size = 1 then
             return 1.0;
             end if;
         declare
