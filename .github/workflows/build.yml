@@ -40,12 +40,27 @@ jobs:
           cat exam_ada.txt
           diff exam_ada.txt exam_python.txt
 
-      - name: Training with blind spots in Ada and in Python must give the same figures
+      - name: A brain studies, is saved, carries on and is compared - the same in Ada and in Python
         run: |
-          time ./bin/calipso_train data/sample_es.txt 1500 > train_ada.txt
-          time python3 reference/train.py data/sample_es.txt 1500 > train_python.txt
-          cat train_ada.txt
-          diff train_ada.txt train_python.txt
+          ./bin/calipso_brain study brain_ada.txt data/sample_es.txt 300 bias+position+decay > brain_ada_log.txt
+          ./bin/calipso_brain study brain_ada.txt data/sample_es.txt 300 >> brain_ada_log.txt
+          ./bin/calipso_brain study mixed_ada.txt data/sample_es.txt 200 counting+bias+harmonic >> brain_ada_log.txt
+          python3 reference/brain.py study brain_python.txt data/sample_es.txt 300 bias+position+decay > brain_python_log.txt
+          python3 reference/brain.py study brain_python.txt data/sample_es.txt 300 >> brain_python_log.txt
+          python3 reference/brain.py study mixed_python.txt data/sample_es.txt 200 counting+bias+harmonic >> brain_python_log.txt
+          cat brain_ada_log.txt
+          sed -e 's/_python/_ada/g' brain_python_log.txt > brain_python_as_ada.txt
+          diff brain_ada_log.txt brain_python_as_ada.txt
+
+      - name: Each language can read the brains the other one saved
+        run: |
+          ./bin/calipso_brain compare data/sample_es.txt brain_python.txt mixed_python.txt > cross_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_python.txt mixed_python.txt > cross_python.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.txt mixed_ada.txt > own_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_ada.txt mixed_ada.txt > own_python.txt
+          cat cross_ada.txt
+          diff cross_ada.txt cross_python.txt
+          diff own_ada.txt own_python.txt
 
   reference:
     name: Python reference

@@ -10,33 +10,50 @@
 --  The expected values come from reference/tests.py (same corpus, same steps).
 
 with Ada.Command_Line;
+with Ada.Containers;
+with Ada.Directories;
 with Ada.Exceptions;
 
 with Calipso.Alphabets;
+with Calipso.Basis_Neurons;
+with Calipso.Bias_Neurons;
 with Calipso.Blind_Spots;
+with Calipso.Brains;
 with Calipso.Canvases;
 with Calipso.Collapsing;
 with Calipso.Console;
+with Calipso.Counting_Neurons;
 with Calipso.Counting_Oracles;
+with Calipso.Criteria;
 with Calipso.Distributions;
+with Calipso.File_Sources;
 with Calipso.Fragment_Counts;
+with Calipso.Memory_Sources;
+with Calipso.Neuron_Kinds;
+with Calipso.Neurons;
+with Calipso.Oracles;
 with Calipso.Random_Sources;
 with Calipso.Repairing;
 with Calipso.Templates;
 with Calipso.Texts;
-with Calipso.Voting_Oracles;
 
 procedure Calipso_Tests is
 
     use Calipso;
+    use type Ada.Containers.Hash_Type;
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
+    use type Texts.Symbol_Text;
 
     Corpus_Text : constant Wide_Wide_String :=
         "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
         & "el oso de la rosa es el oso de la casa. la casa del oso es la costa.";
 
     Test_Longest : constant Positive := 5;
+    Saved_Brain  : constant String := "brain_test_saved.txt";
+    Python_Brain : constant String := "tests/data/brain_from_python.txt";
+    Sample_File  : constant String := "data/sample_es.txt";
+    --# The tests are run from the top folder of the project.
     Tolerance    : constant Long_Float := 1.0E-9;
 
     Letters : Alphabets.Alphabet;
@@ -335,62 +352,239 @@ procedure Calipso_Tests is
         Check ("20 out of 22 are recovered", Result.Recovered = 20);
         end Test_Blind_Spots;
 
-    procedure Test_Voting_Oracles is
-        Board    : constant Canvases.Canvas := Templates.Parsed ("la c_sa de", Letters);
-        Letter_A : constant Symbol := Symbol_For ('a');
+    procedure Test_Bounded_Memory is
+        Table : Fragment_Counts.Count_Table;
+        begin
+        Fragment_Counts.Limit (Table, 1_000);
+        Fragment_Counts.Learn (Table, Corpus, Test_Longest);
+        Check ("bounded memory: la appears 12 times", Fragment_Counts.Count_Of (Table, Piece_Of ("la")) = 12);
+        Check ("bounded memory: casa appears 5 times", Fragment_Counts.Count_Of (Table, Piece_Of ("casa")) = 5);
+        Check ("bounded memory: 173 counters in use", Fragment_Counts.Distinct_Fragments (Table) = 173);
+        Check ("bounded memory: the scrambled number of la", Fragment_Counts.Hash (Piece_Of ("la")) = 1_585_155_634);
+        end Test_Bounded_Memory;
+
+    procedure Test_Basis_Neurons is
+        Size     : constant Symbol := Alphabets.Size (Letters);
+        Waves    : Basis_Neurons.Basis_Neuron;
+        Fading   : Basis_Neurons.Basis_Neuron;
+        Exact    : Basis_Neurons.Basis_Neuron;
+        Presence : constant Neurons.Neuron'Class := Neuron_Kinds.Made ("presence", Size);
+        begin
+        Basis_Neurons.Prepare (Waves, Size, Basis_Neurons.By_Harmonic, 3, 2);
+        Basis_Neurons.Prepare (Fading, Size, Basis_Neurons.By_Decay, 3, 2);
+        Basis_Neurons.Prepare (Exact, Size, Basis_Neurons.By_Position, 3, 0);
+        --# Mirror note: curves count from 1 here and from 0 in Python.
+        Check_Close ("harmonic: the first curve is flat", Basis_Neurons.Curve_Height (Waves, 1, 2), 1.0);
+        Check_Close ("harmonic: cosine of the first wave", Basis_Neurons.Curve_Height (Waves, 2, 1), 0.6234898018587336);
+        Check_Close ("harmonic: sine of the first wave", Basis_Neurons.Curve_Height (Waves, 3, -2), -0.9749279121818236);
+        Check_Close ("harmonic: cosine of the second wave", Basis_Neurons.Curve_Height (Waves, 4, 3), 0.6234898018587334);
+        Check_Close ("decay: the nearest neighbour counts 1", Basis_Neurons.Curve_Height (Fading, 1, -1), 1.0);
+        Check_Close ("decay: slow fading at distance 3", Basis_Neurons.Curve_Height (Fading, 2, -3), 0.36787944117144233);
+        Check_Close ("decay: a right curve at distance 2", Basis_Neurons.Curve_Height (Fading, 3, 2), 0.36787944117144233);
+        Check_Close ("decay: a left curve ignores the right side", Basis_Neurons.Curve_Height (Fading, 1, 2), 0.0);
+        Check_Close ("position: a curve is 1 at its own distance", Basis_Neurons.Curve_Height (Exact, 4, 1), 1.0);
+        Check_Close ("position: and 0 at any other", Basis_Neurons.Curve_Height (Exact, 4, 2), 0.0);
+        Check ("the presence neuron is a harmonic neuron with no waves", Presence.Name = "presence");
+        end Test_Basis_Neurons;
+
+    procedure Build_Small_Brain (
+            Pupil : in out Brains.Brain
+            ) is
+        Size  : constant Symbol := Alphabets.Size (Letters);
+        Bias  : Bias_Neurons.Bias_Neuron;
+        Exact : Basis_Neurons.Basis_Neuron;
+        begin
+        Brains.Prepare (Pupil, Letters);
+        Bias_Neurons.Prepare (Bias, Size);
+        Brains.Add_Neuron (Pupil, Bias);
+        Basis_Neurons.Prepare (Exact, Size, Basis_Neurons.By_Position, 3, 0);
+        Brains.Add_Neuron (Pupil, Exact);
+        end Build_Small_Brain;
+    --# A brain small enough for the tiny corpus: starting points plus exact distances up to 3.
+
+    procedure Study_From_Corpus (
+            Pupil   : in out Brains.Brain;
+            Lessons : in     Natural;
+            Result  :    out Blind_Spots.Exam_Result
+            ) is
+        Reader : Memory_Sources.Memory_Source;
+        Dice   : Random_Sources.Generator := Random_Sources.Seeded (11);
+        begin
+        Memory_Sources.Open (Reader, Corpus, 24, 7);
+        Brains.Study (Pupil, Reader, Dice, Lessons, Result);
+        end Study_From_Corpus;
+
+    procedure Build_Mixed_Brain (
+            Pupil : in out Brains.Brain
+            ) is
+        Unused : Blind_Spots.Exam_Result;
+        pragma Unreferenced (Unused);
+        --# The score of these lessons is not needed here; only the trained brain is.
+        begin
+        Brains.Prepare (Pupil, Letters);
+        Brains.Add_Recipe (Pupil, "bias+presence+harmonic+decay+counting");
+        Study_From_Corpus (Pupil, 30, Unused);
+        end Build_Mixed_Brain;
+
+    function Unknown_Recipe_Is_Refused return Boolean is
+        Pupil : Brains.Brain;
+        begin
+        Brains.Prepare (Pupil, Letters);
+        Brains.Add_Recipe (Pupil, "bias+nonsense");
+        return False;
+        exception
+        when Neuron_Kinds.Recipe_Error =>
+            return True;
+        end Unknown_Recipe_Is_Refused;
+
+    function Opinion_On_A (
+            Model : in Oracles.Oracle'Class
+            ) return Long_Float is
+        Board  : constant Canvases.Canvas := Templates.Parsed ("la c_sa de", Letters);
+        Belief : constant Distributions.Distribution := Model.Opinion (Board, 5);
+        begin
+        return Distributions.Probability_Of (Belief, Symbol_For ('a'));
+        end Opinion_On_A;
+    --# What the model bets on the letter a in "la c_sa de".
+
+    procedure Test_Brains is
         Scores   : constant Distributions.Score_Array (1 .. 4) := (0.0, 1.0, -1.0, 2.0);
         Shares   : constant Distributions.Distribution := Distributions.From_Scores (Scores);
-        Pupil    : Voting_Oracles.Voting_Oracle;
-        Plan     : Voting_Oracles.Lesson_Plan := Voting_Oracles.Default_Plan;
-        Dice     : Random_Sources.Generator := Random_Sources.Seeded (11);
-        Surprise : Long_Float;
+        Pupil    : Brains.Brain;
+        Restored : Brains.Brain;
+        Foreign  : Brains.Brain;
+        Mixed    : Brains.Brain;
+        Counter  : Brains.Brain;
+        Lone     : Counting_Neurons.Counting_Neuron;
+        Teacher  : Counting_Oracles.Counting_Oracle;
         Result   : Blind_Spots.Exam_Result;
-        Filled   : Canvases.Canvas := Templates.Parsed ("la [12] rosa.", Letters);
         begin
         Check_Close ("scores to probabilities: letter 1", Distributions.Weight_Of (Shares, 1), 0.08714431874203257);
         Check_Close ("scores to probabilities: letter 4", Distributions.Weight_Of (Shares, 4), 0.6439142598879724);
         Check_Close ("scores to probabilities: sums to 1", Distributions.Total (Shares), 1.0);
 
-        Voting_Oracles.Prepare (Pupil, Alphabets.Size (Letters), 3);
-        declare
-            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
-            begin
-            Check_Close ("untrained: all letters equally likely", Distributions.Probability_Of (Belief, Letter_A), 0.08333333333333333);
-            end;
-        Voting_Oracles.Learn_Cell (Pupil, Board, 5, Letter_A, 0.5, Surprise);
-        Check_Close ("first lesson: surprise = ln 12", Surprise, 2.4849066497880004);
-        declare
-            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
-            begin
-            Check_Close ("after one lesson the real letter is more likely", Distributions.Probability_Of (Belief, Letter_A), 0.13034687344398008);
-            end;
+        Build_Small_Brain (Pupil);
+        Check_Close ("untrained: all letters equally likely", Opinion_On_A (Pupil), 0.08333333333333333);
+        Study_From_Corpus (Pupil, 60, Result);
+        Check ("studying 60 lessons tests 648 letters and gets 237 right", Result.Hidden = 648 and then Result.Hits = 237);
+        Check_Close ("studying 60 lessons: mean surprise", Blind_Spots.Mean_Surprise (Result), 1.994014327824858);
+        Check_Close ("after studying: P(a)", Opinion_On_A (Pupil), 0.1852612847565514);
+        Check ("the brain knows its recipe", Brains.Recipe_Of (Pupil) = "bias+position");
+        Check ("the brain counts its lessons", Brains.Lessons_Studied (Pupil) = 60);
+        Check ("the reach of a brain is that of its widest neuron", Pupil.Reach = 3);
 
-        Voting_Oracles.Prepare (Pupil, Alphabets.Size (Letters), 3);
-        Plan.Lessons := 60;
-        Plan.Piece_Length := 24;
-        Voting_Oracles.Train (Pupil, Corpus, Dice, Surprise, Plan);
-        Check_Close ("training 60 lessons: final surprise", Surprise, 1.915541972753829);
-        declare
-            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
-            begin
-            Check_Close ("trained: P(a)", Distributions.Probability_Of (Belief, Letter_A), 0.797228557731476);
-            Check ("trained: the most likely is a", Distributions.Most_Likely (Belief) = Letter_A);
-            end;
+        Brains.Save (Pupil, Saved_Brain);
+        Brains.Load (Restored, Saved_Brain);
+        Ada.Directories.Delete_File (Saved_Brain);
+        Check_Close ("saved and loaded: the same opinion", Opinion_On_A (Restored), Opinion_On_A (Pupil));
+        Check (
+            "saved and loaded: the same recipe and lessons",
+            Brains.Recipe_Of (Restored) = "bias+position" and then Brains.Lessons_Studied (Restored) = 60
+            );
 
-        Dice := Random_Sources.Seeded (4);
-        Blind_Spots.Examine (Model, Corpus, Dice, 5, 24, 0.4, Result);
-        Check ("counting exam: 35 hits out of 45", Result.Hidden = 45 and then Result.Hits = 35);
-        Check_Close ("counting exam: mean surprise", Blind_Spots.Mean_Surprise (Result), 0.6231927485060871);
-        Dice := Random_Sources.Seeded (4);
-        Blind_Spots.Examine (Pupil, Corpus, Dice, 5, 24, 0.4, Result);
-        Check ("voting exam: 28 hits out of 45", Result.Hidden = 45 and then Result.Hits = 28);
-        Check_Close ("voting exam: mean surprise", Blind_Spots.Mean_Surprise (Result), 1.0526600853953112);
+        Brains.Load (Foreign, Python_Brain);
+        Check_Close ("a brain saved by Python: P(a)", Opinion_On_A (Foreign), 0.1852612847565514);
+        Check (
+            "a brain saved by Python: recipe and lessons",
+            Brains.Recipe_Of (Foreign) = "bias+position" and then Brains.Lessons_Studied (Foreign) = 60
+            );
 
+        Brains.Prepare (Mixed, Letters);
+        Brains.Add_Recipe (Mixed, "bias+presence+harmonic+decay+counting");
+        Study_From_Corpus (Mixed, 30, Result);
+        Check ("five kinds of neuron in one brain: 142 right out of 326", Result.Hidden = 326 and then Result.Hits = 142);
+        Check_Close ("five kinds of neuron: mean surprise", Blind_Spots.Mean_Surprise (Result), 1.5310978676143332);
+        Check_Close ("five kinds of neuron: P(a)", Opinion_On_A (Mixed), 0.6032365023141226);
+        Check ("five kinds of neuron: recipe", Brains.Recipe_Of (Mixed) = "bias+presence+harmonic+decay+counting");
+
+        Counting_Neurons.Prepare (Lone, Alphabets.Size (Letters));
+        Lone.Learn_From_Text (Corpus);
+        Brains.Prepare (Counter, Letters);
+        Brains.Add_Neuron (Counter, Lone);
+        Counting_Oracles.Train (Teacher, Corpus, Alphabets.Size (Letters));
+        Check_Close (
+            "a brain with only the counting neuron says what the counting oracle says",
+            Opinion_On_A (Counter),
+            Opinion_On_A (Teacher)
+            );
+        Check ("a recipe with an unknown name is refused", Unknown_Recipe_Is_Refused);
+        end Test_Brains;
+
+    procedure Test_Criteria is
+        Template     : constant Wide_Wide_String := "la [12] rosa.";
+        Board        : constant Canvases.Canvas := Templates.Parsed ("la c_sa de", Letters);
+        By_Certainty : constant Criteria.Certainty := (null record);
+        By_Agreement : constant Criteria.Agreement := (null record);
+        By_Leftmost  : constant Criteria.Leftmost := (null record);
+        --# These three criteria hold no data: all that matters is which one it is.
+        Mix          : Criteria.Mixed;
+        Mixed_Brain  : Brains.Brain;
+        Filled       : Canvases.Canvas := Templates.Parsed (Template, Letters);
+        Dice         : Random_Sources.Generator := Random_Sources.Seeded (1);
+        begin
+        Build_Mixed_Brain (Mixed_Brain);
+        Check_Close ("certainty of a hole with both sides known", By_Certainty.Readiness (Board, Model, 5), 0.7760918157754821);
+        Check_Close ("leftmost: readiness falls with position", By_Leftmost.Readiness (Board, Model, 5), 0.6);
+        Check_Close ("agreement among the neurons of a brain", By_Agreement.Readiness (Board, Mixed_Brain, 5), 0.1481966929575596);
+        Check_Close (
+            "agreement without neurons to compare answers as certainty",
+            By_Agreement.Readiness (Board, Model, 5),
+            0.7760918157754821
+            );
+        Criteria.Add_Part (Mix, By_Certainty, 3.0);
+        Criteria.Add_Part (Mix, By_Leftmost, 1.0);
+        Check_Close ("a mix of criteria is their weighted mean", Mix.Readiness (Board, Model, 5), 0.7320688618316117);
+
+        Collapsing.Collapse_By (Filled, Model, Dice, By_Certainty);
+        Check ("collapse by certainty: no holes are left", Canvases.Blank_Count (Filled) = 0);
+        Check_Mirror ("collapse by certainty is most-certain-first", Templates.Rendered (Filled, Letters, True), "la [costa. es la] rosa.");
+
+        Filled := Templates.Parsed (Template, Letters);
         Dice := Random_Sources.Seeded (1);
-        Collapsing.Collapse_All (Filled, Pupil, Dice);
-        Check ("the engine collapses the same with another brain", Canvases.Blank_Count (Filled) = 0);
-        Check_Mirror ("collapse with votes, seed 1", Templates.Rendered (Filled, Letters, True), "la [casasasde la] rosa.");
-        end Test_Voting_Oracles;
+        Collapsing.Collapse_By (Filled, Model, Dice, By_Leftmost, Collapsing.Always_Most_Likely);
+        Check_Mirror ("collapse by leftmost is left to right", Templates.Rendered (Filled, Letters, True), "la [casa de la l] rosa.");
+
+        Filled := Templates.Parsed (Template, Letters);
+        Dice := Random_Sources.Seeded (1);
+        Collapsing.Collapse_By (Filled, Mixed_Brain, Dice, By_Agreement);
+        Check ("collapse by agreement: no holes are left", Canvases.Blank_Count (Filled) = 0);
+        Check_Mirror ("collapse by agreement, seed 1", Templates.Rendered (Filled, Letters, True), "la [coco de roso] rosa.");
+        end Test_Criteria;
+
+    procedure Test_Sources is
+        Reader        : Memory_Sources.Memory_Source;
+        File_Reader   : File_Sources.File_Source;
+        File_Letters  : Alphabets.Alphabet;
+        Piece         : Texts.Symbol_Text;
+        Found         : Boolean;
+        Count         : Natural := 0;
+        First_Matches : Boolean := False;
+        begin
+        Memory_Sources.Open (Reader, Corpus, 24, 7);
+        Reader.Next_Piece (Piece, Found);
+        Check (
+            "memory source: the first piece of seed 7",
+            Found and then Texts.Decoded (Piece, Letters) = " la cosa de la costa. el"
+            );
+
+        Texts.Learn_Alphabet (Sample_File, File_Letters);
+        declare
+            Whole : constant Texts.Symbol_Text := Texts.Read_Symbols (Sample_File, File_Letters);
+            begin
+            File_Sources.Open (File_Reader, Sample_File, File_Letters, 100);
+            loop
+                File_Reader.Next_Piece (Piece, Found);
+                exit when not Found;
+                Count := Count + 1;
+                if Count = 1 then
+                    First_Matches := (Piece = Texts.Part (Whole, 1, 100));
+                    end if;
+                end loop;
+            File_Sources.Close (File_Reader);
+            end;
+        Check ("file source: 91 pieces of 100 letters", Count = 91);
+        Check ("file source: the first piece is the start of the file", First_Matches);
+        end Test_Sources;
 
     begin
     Prepare;
@@ -403,7 +597,11 @@ procedure Calipso_Tests is
     Run_Group ("Collapse", Test_Collapsing'Access);
     Run_Group ("Repair and grow", Test_Repairing'Access);
     Run_Group ("Blind spots", Test_Blind_Spots'Access);
-    Run_Group ("Voting brain", Test_Voting_Oracles'Access);
+    Run_Group ("Bounded memory", Test_Bounded_Memory'Access);
+    Run_Group ("Neurons that measure distance", Test_Basis_Neurons'Access);
+    Run_Group ("Brains", Test_Brains'Access);
+    Run_Group ("Criteria", Test_Criteria'Access);
+    Run_Group ("Sources", Test_Sources'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

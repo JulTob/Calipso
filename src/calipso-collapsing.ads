@@ -11,6 +11,7 @@
 --  The engine does not know which brain it uses: it only knows the Oracle contract.
 
 with Calipso.Canvases;
+with Calipso.Criteria;
 with Calipso.Oracles;
 with Calipso.Random_Sources;
 
@@ -37,5 +38,20 @@ package Calipso.Collapsing is
         with Post => Canvases.Blank_Count (Board) = 0;
     --# Fills every hole of the canvas.
     --# Observer, if given, is called after each collapsed cell (to draw the process).
+
+    procedure Collapse_By (
+            Board    : in out Canvases.Canvas;
+            Model    : in     Oracles.Oracle'Class;
+            Dice     : in out Random_Sources.Generator;
+            Guide    : in     Criteria.Criterion'Class;
+            Rule     : in     Choice_Rule := By_Chance;
+            Observer : access procedure (
+                    Current  : in Canvases.Canvas;
+                    Position : in Positive
+                    ) := null
+            )
+        with Post => Canvases.Blank_Count (Board) = 0;
+    --# The same loop as Collapse_All, but the order is decided by a criterion
+    --# that can be swapped: the readiest hole collapses first.
 
     end Calipso.Collapsing;

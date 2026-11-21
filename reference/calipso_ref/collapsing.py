@@ -10,6 +10,7 @@ and repeat until no holes are left.
 """
 
 from . import canvases
+from . import criteria
 from . import distributions
 from . import oracles
 from . import random_sources
@@ -145,6 +146,61 @@ def Collapse_All(
     notes = Fresh_Notes(canvases.Length(board))
     while canvases.Blank_Count(board) > 0:
         target = Next_Target(board, model, dice, order, notes)
+        Collapse_Cell(board, model, dice, rule, target)
+        Mark_Stale_Around(notes, target, model.Reach())
+        if observer is not None:
+            observer(board, target)
+
+
+class Readiness_Note:
+
+    def __init__(self):
+        self.is_fresh = False
+        self.readiness = 0.0
+
+
+def Refresh_Readiness(
+        notes: list,
+        board: canvases.Canvas,
+        model: oracles.Oracle,
+        guide: criteria.Criterion
+        ) -> None:
+    for position in range(0, canvases.Length(board)):
+        if canvases.Is_Blank(board, position) and not notes[position].is_fresh:
+            notes[position].readiness = guide.Readiness(board, model, position)
+            notes[position].is_fresh = True
+
+
+def Readiest_Blank(
+        notes: list,
+        board: canvases.Canvas
+        ) -> int:
+    #-- The readiest hole. On a tie, the first one.
+    best = -1
+    for position in range(0, canvases.Length(board)):
+        if canvases.Is_Blank(board, position):
+            if best < 0:
+                best = position
+            elif notes[position].readiness > notes[best].readiness:
+                best = position
+    return best
+
+
+def Collapse_By(
+        board: canvases.Canvas,
+        model: oracles.Oracle,
+        dice: random_sources.Generator,
+        guide: criteria.Criterion,
+        rule: int = BY_CHANCE,
+        observer=None
+        ) -> None:
+    #-- The same loop as Collapse_All, but the order is decided by a criterion that can be swapped.
+    notes = []
+    for _ in range(0, canvases.Length(board)):
+        notes.append(Readiness_Note())
+    while canvases.Blank_Count(board) > 0:
+        Refresh_Readiness(notes, board, model, guide)
+        target = Readiest_Blank(notes, board)
         Collapse_Cell(board, model, dice, rule, target)
         Mark_Stale_Around(notes, target, model.Reach())
         if observer is not None:

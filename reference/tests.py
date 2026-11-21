@@ -6,27 +6,38 @@ Usage:
 The expected values used by the Ada tests come from here.
 """
 
+import os
 import sys
 
 from calipso_ref import UNKNOWN
 from calipso_ref import alphabets
+from calipso_ref import basis_neurons
+from calipso_ref import bias_neurons
 from calipso_ref import blind_spots
+from calipso_ref import brains
 from calipso_ref import canvases
 from calipso_ref import collapsing
+from calipso_ref import counting_neurons
 from calipso_ref import counting_oracles
+from calipso_ref import criteria
 from calipso_ref import distributions
 from calipso_ref import fragment_counts
+from calipso_ref import neuron_kinds
 from calipso_ref import random_sources
 from calipso_ref import repairing
+from calipso_ref import sources
 from calipso_ref import templates
 from calipso_ref import texts
-from calipso_ref import voting_oracles
 
 CORPUS_TEXT = (
     "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
     "el oso de la rosa es el oso de la casa. la casa del oso es la costa."
     )
 TEST_LONGEST = 5
+SAVED_BRAIN = "brain_test_saved.txt"
+PYTHON_BRAIN = "tests/data/brain_from_python.txt"
+SAMPLE_FILE = "data/sample_es.txt"
+#-- The tests are run from the top folder of the project.
 TOLERANCE = 1.0e-9
 
 
@@ -260,13 +271,104 @@ def Test_Blind_Spots(
     Check(fixture, "20 out of 22 are recovered", result.recovered == 20)
 
 
-def Test_Voting_Oracles(
+def Test_Bounded_Memory(
+        fixture: Fixture
+        ) -> None:
+    table = fragment_counts.Count_Table()
+    fragment_counts.Limit(table, 1000)
+    fragment_counts.Learn(table, fixture.corpus, TEST_LONGEST)
+    Check(fixture, "bounded memory: la appears 12 times", fragment_counts.Count_Of(table, bytes(texts.Encoded("la", fixture.letters))) == 12)
+    Check(fixture, "bounded memory: casa appears 5 times", fragment_counts.Count_Of(table, bytes(texts.Encoded("casa", fixture.letters))) == 5)
+    Check(fixture, "bounded memory: 173 counters in use", fragment_counts.Distinct_Fragments(table) == 173)
+    Check(fixture, "bounded memory: the scrambled number of la", fragment_counts.Hash(bytes(texts.Encoded("la", fixture.letters))) == 1585155634)
+
+
+def Test_Basis_Neurons(
         fixture: Fixture
         ) -> None:
     size = alphabets.Size(fixture.letters)
-    letter_a = Symbol_For(fixture, "a")
-    board = templates.Parsed("la c_sa de", fixture.letters)
+    waves = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(waves, size, basis_neurons.BY_HARMONIC, 3, 2)
+    fading = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(fading, size, basis_neurons.BY_DECAY, 3, 2)
+    exact = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(exact, size, basis_neurons.BY_POSITION, 3, 0)
+    #-- Mirror note: curves count from 0 here and from 1 in Ada.
+    Check_Close(fixture, "harmonic: the first curve is flat", basis_neurons.Curve_Height(waves, 0, 2), 1.0)
+    Check_Close(fixture, "harmonic: cosine of the first wave", basis_neurons.Curve_Height(waves, 1, 1), 0.6234898018587336)
+    Check_Close(fixture, "harmonic: sine of the first wave", basis_neurons.Curve_Height(waves, 2, -2), -0.9749279121818236)
+    Check_Close(fixture, "harmonic: cosine of the second wave", basis_neurons.Curve_Height(waves, 3, 3), 0.6234898018587334)
+    Check_Close(fixture, "decay: the nearest neighbour counts 1", basis_neurons.Curve_Height(fading, 0, -1), 1.0)
+    Check_Close(fixture, "decay: slow fading at distance 3", basis_neurons.Curve_Height(fading, 1, -3), 0.36787944117144233)
+    Check_Close(fixture, "decay: a right curve at distance 2", basis_neurons.Curve_Height(fading, 2, 2), 0.36787944117144233)
+    Check_Close(fixture, "decay: a left curve ignores the right side", basis_neurons.Curve_Height(fading, 0, 2), 0.0)
+    Check_Close(fixture, "position: a curve is 1 at its own distance", basis_neurons.Curve_Height(exact, 3, 1), 1.0)
+    Check_Close(fixture, "position: and 0 at any other", basis_neurons.Curve_Height(exact, 3, 2), 0.0)
+    Check(fixture, "the presence neuron is a harmonic neuron with no waves", neuron_kinds.Made("presence", size).Name() == "presence")
 
+
+def Build_Small_Brain(
+        fixture: Fixture
+        ) -> brains.Brain:
+    #-- A brain small enough for the tiny corpus: starting points plus exact distances up to 3.
+    size = alphabets.Size(fixture.letters)
+    brain = brains.Brain()
+    brains.Prepare(brain, fixture.letters)
+    bias = bias_neurons.Bias_Neuron()
+    bias_neurons.Prepare(bias, size)
+    brains.Add_Neuron(brain, bias)
+    exact = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(exact, size, basis_neurons.BY_POSITION, 3, 0)
+    brains.Add_Neuron(brain, exact)
+    return brain
+
+
+def Study_From_Corpus(
+        fixture: Fixture,
+        brain: brains.Brain,
+        lessons: int
+        ) -> blind_spots.Exam_Result:
+    source = sources.Memory_Source()
+    sources.Open_Memory(source, fixture.corpus, 24, 7)
+    dice = random_sources.Seeded(11)
+    return brains.Study(brain, source, dice, lessons)
+
+
+def Build_Mixed_Brain(
+        fixture: Fixture
+        ) -> brains.Brain:
+    brain = brains.Brain()
+    brains.Prepare(brain, fixture.letters)
+    brains.Add_Recipe(brain, "bias+presence+harmonic+decay+counting")
+    Study_From_Corpus(fixture, brain, 30)
+    return brain
+
+
+def Unknown_Recipe_Is_Refused(
+        fixture: Fixture
+        ) -> bool:
+    brain = brains.Brain()
+    brains.Prepare(brain, fixture.letters)
+    try:
+        brains.Add_Recipe(brain, "bias+nonsense")
+    except neuron_kinds.Recipe_Error:
+        return True
+    return False
+
+
+def Opinion_On_A(
+        fixture: Fixture,
+        model
+        ) -> float:
+    #-- What the model bets on the letter a in "la c_sa de".
+    board = templates.Parsed("la c_sa de", fixture.letters)
+    belief = model.Opinion(board, 4)
+    return distributions.Probability_Of(belief, Symbol_For(fixture, "a"))
+
+
+def Test_Brains(
+        fixture: Fixture
+        ) -> None:
     scores = [0.0, 0.0, 1.0, -1.0, 2.0]
     #-- Position 0 is not used: the scores are (0, 1, -1, 2).
     shares = distributions.From_Scores(scores)
@@ -274,41 +376,107 @@ def Test_Voting_Oracles(
     Check_Close(fixture, "scores to probabilities: letter 4", distributions.Weight_Of(shares, 4), 0.6439142598879724)
     Check_Close(fixture, "scores to probabilities: sums to 1", distributions.Total(shares), 1.0)
 
-    pupil = voting_oracles.Voting_Oracle()
-    voting_oracles.Prepare(pupil, size, 3)
-    belief = pupil.Opinion(board, 4)
-    Check_Close(fixture, "untrained: all letters equally likely", distributions.Probability_Of(belief, letter_a), 0.08333333333333333)
-    surprise = voting_oracles.Learn_Cell(pupil, board, 4, letter_a, 0.5)
-    Check_Close(fixture, "first lesson: surprise = ln 12", surprise, 2.4849066497880004)
-    belief = pupil.Opinion(board, 4)
-    Check_Close(fixture, "after one lesson the real letter is more likely", distributions.Probability_Of(belief, letter_a), 0.13034687344398008)
+    brain = Build_Small_Brain(fixture)
+    Check_Close(fixture, "untrained: all letters equally likely", Opinion_On_A(fixture, brain), 0.08333333333333333)
+    result = Study_From_Corpus(fixture, brain, 60)
+    Check(fixture, "studying 60 lessons tests 648 letters and gets 237 right", result.hidden == 648 and result.hits == 237)
+    Check_Close(fixture, "studying 60 lessons: mean surprise", blind_spots.Mean_Surprise(result), 1.994014327824858)
+    Check_Close(fixture, "after studying: P(a)", Opinion_On_A(fixture, brain), 0.1852612847565514)
+    Check(fixture, "the brain knows its recipe", brains.Recipe_Of(brain) == "bias+position")
+    Check(fixture, "the brain counts its lessons", brain.lessons == 60)
+    Check(fixture, "the reach of a brain is that of its widest neuron", brain.Reach() == 3)
 
-    pupil = voting_oracles.Voting_Oracle()
-    voting_oracles.Prepare(pupil, size, 3)
-    plan = voting_oracles.Lesson_Plan()
-    plan.lessons = 60
-    plan.piece_length = 24
-    dice = random_sources.Seeded(11)
-    final_surprise = voting_oracles.Train(pupil, fixture.corpus, dice, plan)
-    Check_Close(fixture, "training 60 lessons: final surprise", final_surprise, 1.915541972753829)
-    belief = pupil.Opinion(board, 4)
-    Check_Close(fixture, "trained: P(a)", distributions.Probability_Of(belief, letter_a), 0.797228557731476)
-    Check(fixture, "trained: the most likely is a", distributions.Most_Likely(belief) == letter_a)
+    brains.Save(brain, SAVED_BRAIN)
+    restored = brains.Brain()
+    brains.Load(restored, SAVED_BRAIN)
+    os.remove(SAVED_BRAIN)
+    Check_Close(fixture, "saved and loaded: the same opinion", Opinion_On_A(fixture, restored), Opinion_On_A(fixture, brain))
+    Check(fixture, "saved and loaded: the same recipe and lessons", brains.Recipe_Of(restored) == "bias+position" and restored.lessons == 60)
 
-    dice = random_sources.Seeded(4)
-    result = blind_spots.Examine(fixture.model, fixture.corpus, dice, 5, 24, 0.4)
-    Check(fixture, "counting exam: 35 hits out of 45", result.hidden == 45 and result.hits == 35)
-    Check_Close(fixture, "counting exam: mean surprise", blind_spots.Mean_Surprise(result), 0.6231927485060871)
-    dice = random_sources.Seeded(4)
-    result = blind_spots.Examine(pupil, fixture.corpus, dice, 5, 24, 0.4)
-    Check(fixture, "voting exam: 28 hits out of 45", result.hidden == 45 and result.hits == 28)
-    Check_Close(fixture, "voting exam: mean surprise", blind_spots.Mean_Surprise(result), 1.0526600853953112)
+    foreign = brains.Brain()
+    brains.Load(foreign, PYTHON_BRAIN)
+    Check_Close(fixture, "a brain saved by Python: P(a)", Opinion_On_A(fixture, foreign), 0.1852612847565514)
+    Check(fixture, "a brain saved by Python: recipe and lessons", brains.Recipe_Of(foreign) == "bias+position" and foreign.lessons == 60)
 
-    filled = templates.Parsed("la [12] rosa.", fixture.letters)
+    mixed = brains.Brain()
+    brains.Prepare(mixed, fixture.letters)
+    brains.Add_Recipe(mixed, "bias+presence+harmonic+decay+counting")
+    result = Study_From_Corpus(fixture, mixed, 30)
+    Check(fixture, "five kinds of neuron in one brain: 142 right out of 326", result.hidden == 326 and result.hits == 142)
+    Check_Close(fixture, "five kinds of neuron: mean surprise", blind_spots.Mean_Surprise(result), 1.5310978676143332)
+    Check_Close(fixture, "five kinds of neuron: P(a)", Opinion_On_A(fixture, mixed), 0.6032365023141226)
+    Check(fixture, "five kinds of neuron: recipe", brains.Recipe_Of(mixed) == "bias+presence+harmonic+decay+counting")
+
+    lone = counting_neurons.Counting_Neuron()
+    counting_neurons.Prepare(lone, alphabets.Size(fixture.letters))
+    lone.Learn_From_Text(fixture.corpus)
+    counter = brains.Brain()
+    brains.Prepare(counter, fixture.letters)
+    brains.Add_Neuron(counter, lone)
+    teacher = counting_oracles.Counting_Oracle()
+    counting_oracles.Train(teacher, fixture.corpus, alphabets.Size(fixture.letters))
+    Check_Close(fixture, "a brain with only the counting neuron says what the counting oracle says", Opinion_On_A(fixture, counter), Opinion_On_A(fixture, teacher))
+    Check(fixture, "a recipe with an unknown name is refused", Unknown_Recipe_Is_Refused(fixture))
+
+
+def Test_Criteria(
+        fixture: Fixture
+        ) -> None:
+    template = "la [12] rosa."
+    board = templates.Parsed("la c_sa de", fixture.letters)
+    mixed_brain = Build_Mixed_Brain(fixture)
+    Check_Close(fixture, "certainty of a hole with both sides known", criteria.Certainty().Readiness(board, fixture.model, 4), 0.7760918157754821)
+    Check_Close(fixture, "leftmost: readiness falls with position", criteria.Leftmost().Readiness(board, fixture.model, 4), 0.6)
+    Check_Close(fixture, "agreement among the neurons of a brain", criteria.Agreement().Readiness(board, mixed_brain, 4), 0.1481966929575596)
+    Check_Close(fixture, "agreement without neurons to compare answers as certainty", criteria.Agreement().Readiness(board, fixture.model, 4), 0.7760918157754821)
+    mix = criteria.Mixed()
+    criteria.Add_Part(mix, criteria.Certainty(), 3.0)
+    criteria.Add_Part(mix, criteria.Leftmost(), 1.0)
+    Check_Close(fixture, "a mix of criteria is their weighted mean", mix.Readiness(board, fixture.model, 4), 0.7320688618316117)
+
+    filled = templates.Parsed(template, fixture.letters)
     dice = random_sources.Seeded(1)
-    collapsing.Collapse_All(filled, pupil, dice)
-    Check(fixture, "the engine collapses the same with another brain", canvases.Blank_Count(filled) == 0)
-    Check(fixture, "collapse with votes, seed 1", templates.Rendered(filled, fixture.letters, True) == "la [casasasde la] rosa.")
+    collapsing.Collapse_By(filled, fixture.model, dice, criteria.Certainty())
+    Check(fixture, "collapse by certainty: no holes are left", canvases.Blank_Count(filled) == 0)
+    Check(fixture, "collapse by certainty is most-certain-first", templates.Rendered(filled, fixture.letters, True) == "la [costa. es la] rosa.")
+
+    filled = templates.Parsed(template, fixture.letters)
+    dice = random_sources.Seeded(1)
+    collapsing.Collapse_By(filled, fixture.model, dice, criteria.Leftmost(), collapsing.ALWAYS_MOST_LIKELY)
+    Check(fixture, "collapse by leftmost is left to right", templates.Rendered(filled, fixture.letters, True) == "la [casa de la l] rosa.")
+
+    filled = templates.Parsed(template, fixture.letters)
+    dice = random_sources.Seeded(1)
+    collapsing.Collapse_By(filled, mixed_brain, dice, criteria.Agreement())
+    Check(fixture, "collapse by agreement: no holes are left", canvases.Blank_Count(filled) == 0)
+    Check(fixture, "collapse by agreement, seed 1", templates.Rendered(filled, fixture.letters, True) == "la [coco de roso] rosa.")
+
+
+def Test_Sources(
+        fixture: Fixture
+        ) -> None:
+    source = sources.Memory_Source()
+    sources.Open_Memory(source, fixture.corpus, 24, 7)
+    piece, found = source.Next_Piece()
+    Check(fixture, "memory source: the first piece of seed 7", found and texts.Decoded(piece, fixture.letters) == " la cosa de la costa. el")
+
+    file_letters = alphabets.Alphabet()
+    texts.Learn_Alphabet(SAMPLE_FILE, file_letters)
+    whole = texts.Read_Symbols(SAMPLE_FILE, file_letters)
+    reader = sources.File_Source()
+    sources.Open_File(reader, SAMPLE_FILE, file_letters, 100)
+    count = 0
+    first_matches = False
+    while True:
+        piece, found = reader.Next_Piece()
+        if not found:
+            break
+        count = count + 1
+        if count == 1:
+            first_matches = (piece == texts.Part(whole, 0, 99))
+    sources.Close_File(reader)
+    Check(fixture, "file source: 91 pieces of 100 letters", count == 91)
+    Check(fixture, "file source: the first piece is the start of the file", first_matches)
 
 
 def Main() -> None:
@@ -323,7 +491,11 @@ def Main() -> None:
         ("Collapse", Test_Collapsing),
         ("Repair and grow", Test_Repairing),
         ("Blind spots", Test_Blind_Spots),
-        ("Voting brain", Test_Voting_Oracles),
+        ("Bounded memory", Test_Bounded_Memory),
+        ("Neurons that measure distance", Test_Basis_Neurons),
+        ("Brains", Test_Brains),
+        ("Criteria", Test_Criteria),
+        ("Sources", Test_Sources),
         ]
     for title, group in groups:
         print(title)

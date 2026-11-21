@@ -26,6 +26,9 @@ def For_Each_Character(
     lines = content.split(LINE_FEED)
     if len(lines) > 0 and lines[-1] == "":
         lines.pop()
+    if len(lines) > 0 and lines[-1] == "":
+        lines.pop()
+        #-- Mirror note: Ada.Text_IO does not read one empty line at the very end of a file.
     for line in lines:
         for char in line:
             if char != CARRIAGE_RETURN:

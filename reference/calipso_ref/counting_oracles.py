@@ -64,6 +64,27 @@ class Counting_Oracle(oracles.Oracle):
         return belief
 
 
+def Prepare(
+        model: Counting_Oracle,
+        letter_count: int,
+        longest: int = DEFAULT_LONGEST,
+        capacity: int = 0
+        ) -> None:
+    #-- Leaves the brain blank. `capacity` 0 = exact memory; more = bounded memory.
+    model.letter_count = letter_count
+    model.longest = longest
+    model.table = fragment_counts.Count_Table()
+    fragment_counts.Limit(model.table, capacity)
+
+
+def Study(
+        model: Counting_Oracle,
+        text: list
+        ) -> None:
+    #-- Adds what this text teaches to what the brain already knew.
+    fragment_counts.Learn(model.table, text, model.longest)
+
+
 def Train(
         model: Counting_Oracle,
         text: list,
@@ -71,10 +92,8 @@ def Train(
         longest: int = DEFAULT_LONGEST
         ) -> None:
     #-- "Training" this brain is just counting fragments.
-    model.letter_count = letter_count
-    model.longest = longest
-    model.table = fragment_counts.Count_Table()
-    fragment_counts.Learn(model.table, text, longest)
+    Prepare(model, letter_count, longest)
+    Study(model, text)
 
 
 def Known_Run(

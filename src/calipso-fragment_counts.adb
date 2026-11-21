@@ -1,3 +1,5 @@
+with Calipso.Records;
+
 package body Calipso.Fragment_Counts is
 
     use type Ada.Containers.Hash_Type;
@@ -32,13 +34,55 @@ package body Calipso.Fragment_Counts is
         return Piece;
         end Slice;
 
+    function Slot_Of (
+            Table : in Count_Table;
+            Piece : in Fragment
+            ) return Positive is
+        Scrambled : constant Ada.Containers.Hash_Type := Hash (Piece);
+        Limit_Of  : constant Ada.Containers.Hash_Type := Ada.Containers.Hash_Type (Table.Capacity);
+        begin
+        return Natural (Scrambled mod Limit_Of) + 1;
+        end Slot_Of;
+
+    procedure Limit (
+            Table    : in out Count_Table;
+            Capacity : in     Natural
+            ) is
+        begin
+        Table.Counts.Clear;
+        Table.Capacity := Capacity;
+        Table.Slots := Slot_Vectors.To_Vector (0, Ada.Containers.Count_Type (Capacity));
+        end Limit;
+
+    function Capacity_Of (
+            Table : in Count_Table
+            ) return Natural is
+        begin
+        return Table.Capacity;
+        end Capacity_Of;
+
+    procedure Add_One_Bounded (
+            Table : in out Count_Table;
+            Piece : in     Fragment
+            ) is
+        Slot : constant Positive := Slot_Of (Table, Piece);
+        Seen : constant Natural := Table.Slots.Element (Slot);
+        begin
+        Table.Slots.Replace_Element (Slot, Seen + 1);
+        end Add_One_Bounded;
+
     procedure Add_One (
             Table : in out Count_Table;
             Piece : in     Fragment
             ) is
-        Place : constant Count_Maps.Cursor := Table.Counts.Find (Piece);
+        Place : Count_Maps.Cursor;
         Seen  : Natural;
         begin
+        if Table.Capacity > 0 then
+            Add_One_Bounded (Table, Piece);
+            return;
+            end if;
+        Place := Table.Counts.Find (Piece);
         if Count_Maps.Has_Element (Place) then
             Seen := Count_Maps.Element (Place);
             Table.Counts.Replace_Element (Place, Seen + 1);
@@ -51,8 +95,12 @@ package body Calipso.Fragment_Counts is
             Table : in Count_Table;
             Piece : in Fragment
             ) return Natural is
-        Place : constant Count_Maps.Cursor := Table.Counts.Find (Piece);
+        Place : Count_Maps.Cursor;
         begin
+        if Table.Capacity > 0 then
+            return Table.Slots.Element (Slot_Of (Table, Piece));
+            end if;
+        Place := Table.Counts.Find (Piece);
         if Count_Maps.Has_Element (Place) then
             return Count_Maps.Element (Place);
             end if;
@@ -62,9 +110,19 @@ package body Calipso.Fragment_Counts is
     function Distinct_Fragments (
             Table : in Count_Table
             ) return Natural is
+        Used : Natural := 0;
         begin
-        return Natural (Table.Counts.Length);
+        if Table.Capacity = 0 then
+            return Natural (Table.Counts.Length);
+            end if;
+        for Slot in 1 .. Table.Capacity loop
+            if Table.Slots.Element (Slot) > 0 then
+                Used := Used + 1;
+                end if;
+            end loop;
+        return Used;
         end Distinct_Fragments;
+    --# With bounded memory: how many counters are in use.
 
     procedure Learn (
             Table   : in out Count_Table;
@@ -80,5 +138,84 @@ package body Calipso.Fragment_Counts is
                 end loop;
             end loop;
         end Learn;
+
+    procedure Save_Bounded (
+            Table : in Count_Table;
+            File  : in Ada.Text_IO.File_Type
+            ) is
+        begin
+        Records.Write_Count (File, Distinct_Fragments (Table));
+        for Slot in 1 .. Table.Capacity loop
+            if Table.Slots.Element (Slot) > 0 then
+                Records.Write_Count (File, Slot);
+                Records.Write_Count (File, Table.Slots.Element (Slot));
+                end if;
+            end loop;
+        end Save_Bounded;
+
+    procedure Save_Exact (
+            Table : in Count_Table;
+            File  : in Ada.Text_IO.File_Type
+            ) is
+        begin
+        Records.Write_Count (File, Natural (Table.Counts.Length));
+        for Place in Table.Counts.Iterate loop
+            declare
+                Piece : constant Fragment := Count_Maps.Key (Place);
+                begin
+                Records.Write_Count (File, Piece'Length);
+                for Value of Piece loop
+                    Records.Write_Count (File, Natural (Value));
+                    end loop;
+                Records.Write_Count (File, Count_Maps.Element (Place));
+                end;
+            end loop;
+        end Save_Exact;
+
+    procedure Save (
+            Table : in Count_Table;
+            File  : in Ada.Text_IO.File_Type
+            ) is
+        begin
+        Records.Write_Count (File, Table.Capacity);
+        if Table.Capacity > 0 then
+            Save_Bounded (Table, File);
+        else
+            Save_Exact (Table, File);
+            end if;
+        end Save;
+
+    procedure Load_One_Fragment (
+            Table : in out Count_Table;
+            File  : in     Ada.Text_IO.File_Type
+            ) is
+        Length : constant Natural := Records.Read_Count (File);
+        Piece  : Fragment (1 .. Length);
+        begin
+        for Index in 1 .. Length loop
+            Piece (Index) := Symbol (Records.Read_Count (File));
+            end loop;
+        Table.Counts.Insert (Piece, Records.Read_Count (File));
+        end Load_One_Fragment;
+
+    procedure Load (
+            Table : in out Count_Table;
+            File  : in     Ada.Text_IO.File_Type
+            ) is
+        Capacity : constant Natural := Records.Read_Count (File);
+        Entries  : Natural;
+        Slot     : Natural;
+        begin
+        Limit (Table, Capacity);
+        Entries := Records.Read_Count (File);
+        for Entry_Number in 1 .. Entries loop
+            if Capacity > 0 then
+                Slot := Records.Read_Count (File);
+                Table.Slots.Replace_Element (Slot, Records.Read_Count (File));
+            else
+                Load_One_Fragment (Table, File);
+                end if;
+            end loop;
+        end Load;
 
     end Calipso.Fragment_Counts;
