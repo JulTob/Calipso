@@ -1,4 +1,3 @@
-with Calipso.Records;
 
 package body Calipso.Fragment_Counts is
 
@@ -140,80 +139,80 @@ package body Calipso.Fragment_Counts is
         end Learn;
 
     procedure Save_Bounded (
-            Table : in Count_Table;
-            File  : in Ada.Text_IO.File_Type
+            Table : in     Count_Table;
+            Tape  : in out Records.Tape
             ) is
         begin
-        Records.Write_Count (File, Distinct_Fragments (Table));
+        Records.Write_Count (Tape, Distinct_Fragments (Table));
         for Slot in 1 .. Table.Capacity loop
             if Table.Slots.Element (Slot) > 0 then
-                Records.Write_Count (File, Slot);
-                Records.Write_Count (File, Table.Slots.Element (Slot));
+                Records.Write_Count (Tape, Slot);
+                Records.Write_Count (Tape, Table.Slots.Element (Slot));
                 end if;
             end loop;
         end Save_Bounded;
 
     procedure Save_Exact (
-            Table : in Count_Table;
-            File  : in Ada.Text_IO.File_Type
+            Table : in     Count_Table;
+            Tape  : in out Records.Tape
             ) is
         begin
-        Records.Write_Count (File, Natural (Table.Counts.Length));
+        Records.Write_Count (Tape, Natural (Table.Counts.Length));
         for Place in Table.Counts.Iterate loop
             declare
                 Piece : constant Fragment := Count_Maps.Key (Place);
                 begin
-                Records.Write_Count (File, Piece'Length);
+                Records.Write_Count (Tape, Piece'Length);
                 for Value of Piece loop
-                    Records.Write_Count (File, Natural (Value));
+                    Records.Write_Count (Tape, Natural (Value));
                     end loop;
-                Records.Write_Count (File, Count_Maps.Element (Place));
+                Records.Write_Count (Tape, Count_Maps.Element (Place));
                 end;
             end loop;
         end Save_Exact;
 
     procedure Save (
-            Table : in Count_Table;
-            File  : in Ada.Text_IO.File_Type
+            Table : in     Count_Table;
+            Tape  : in out Records.Tape
             ) is
         begin
-        Records.Write_Count (File, Table.Capacity);
+        Records.Write_Count (Tape, Table.Capacity);
         if Table.Capacity > 0 then
-            Save_Bounded (Table, File);
+            Save_Bounded (Table, Tape);
         else
-            Save_Exact (Table, File);
+            Save_Exact (Table, Tape);
             end if;
         end Save;
 
     procedure Load_One_Fragment (
             Table : in out Count_Table;
-            File  : in     Ada.Text_IO.File_Type
+            Tape  : in out Records.Tape
             ) is
-        Length : constant Natural := Records.Read_Count (File);
+        Length : constant Natural := Records.Read_Count (Tape);
         Piece  : Fragment (1 .. Length);
         begin
         for Index in 1 .. Length loop
-            Piece (Index) := Symbol (Records.Read_Count (File));
+            Piece (Index) := Symbol (Records.Read_Count (Tape));
             end loop;
-        Table.Counts.Insert (Piece, Records.Read_Count (File));
+        Table.Counts.Insert (Piece, Records.Read_Count (Tape));
         end Load_One_Fragment;
 
     procedure Load (
             Table : in out Count_Table;
-            File  : in     Ada.Text_IO.File_Type
+            Tape  : in out Records.Tape
             ) is
-        Capacity : constant Natural := Records.Read_Count (File);
+        Capacity : constant Natural := Records.Read_Count (Tape);
         Entries  : Natural;
         Slot     : Natural;
         begin
         Limit (Table, Capacity);
-        Entries := Records.Read_Count (File);
+        Entries := Records.Read_Count (Tape);
         for Entry_Number in 1 .. Entries loop
             if Capacity > 0 then
-                Slot := Records.Read_Count (File);
-                Table.Slots.Replace_Element (Slot, Records.Read_Count (File));
+                Slot := Records.Read_Count (Tape);
+                Table.Slots.Replace_Element (Slot, Records.Read_Count (Tape));
             else
-                Load_One_Fragment (Table, File);
+                Load_One_Fragment (Table, Tape);
                 end if;
             end loop;
         end Load;

@@ -1,8 +1,6 @@
 with Ada.Strings.Unbounded;
-with Ada.Text_IO;
 
 with Calipso.Neuron_Kinds;
-with Calipso.Records;
 with Calipso.Templates;
 
 package body Calipso.Brains is
@@ -201,27 +199,27 @@ package body Calipso.Brains is
         end Study;
 
     procedure Write_Brain (
-            Self : in Brain;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Brain;
+            Tape : in out Records.Tape
             ) is
         Size : constant Symbol := Alphabets.Size (Self.Alphabet);
         Char : Wide_Wide_Character;
         begin
-        Records.Write_Word (File, File_Mark);
-        Records.Write_Count (File, File_Version);
-        Records.Write_Count (File, Natural (Size));
+        Records.Write_Word (Tape, File_Mark);
+        Records.Write_Count (Tape, File_Version);
+        Records.Write_Count (Tape, Natural (Size));
         for Value in Symbol range 1 .. Size loop
             Char := Alphabets.Character_Of (Self.Alphabet, Value);
-            Records.Write_Count (File, Wide_Wide_Character'Pos (Char));
+            Records.Write_Count (Tape, Wide_Wide_Character'Pos (Char));
             --# Each letter is saved as its Unicode number.
             end loop;
-        Records.Write_Count (File, Self.Studied);
-        Records.Write_Real (File, Self.Learning_Rate);
-        Records.Write_Count (File, Neuron_Count (Self));
+        Records.Write_Count (Tape, Self.Studied);
+        Records.Write_Real (Tape, Self.Learning_Rate);
+        Records.Write_Count (Tape, Neuron_Count (Self));
         for Index in 1 .. Neuron_Count (Self) loop
-            Records.Write_Word (File, Self.Cells (Index).Kind);
-            Records.Write_Real (File, Self.Weights.Element (Index));
-            Self.Cells (Index).Save (File);
+            Records.Write_Word (Tape, Self.Cells (Index).Kind);
+            Records.Write_Real (Tape, Self.Weights.Element (Index));
+            Self.Cells (Index).Save (Tape);
             end loop;
         end Write_Brain;
 
@@ -229,87 +227,83 @@ package body Calipso.Brains is
             Self      : in Brain;
             File_Name : in String
             ) is
-        File : Ada.Text_IO.File_Type;
+        Tape : Records.Tape;
         begin
-        Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, File_Name);
-        Write_Brain (Self, File);
-        Ada.Text_IO.Close (File);
-        exception
-        when Ada.Text_IO.Name_Error | Ada.Text_IO.Use_Error =>
-            raise Records.Record_Error with "cannot write the file " & File_Name;
+        Write_Brain (Self, Tape);
+        Records.Save (Tape, File_Name);
         end Save;
 
     procedure Read_Alphabet (
             Letters : in out Alphabets.Alphabet;
-            File    : in     Ada.Text_IO.File_Type
+            Tape    : in out Records.Tape
             ) is
-        Size   : constant Natural := Records.Read_Count (File);
+        Size   : constant Natural := Records.Read_Count (Tape);
         Number : Natural;
         begin
-        Number := Records.Read_Count (File);
-        --# Symbol 1 is always the unknown mark: its line is read and set aside.
-        for Value in 2 .. Size loop
-            Number := Records.Read_Count (File);
-            Alphabets.Include (Letters, Wide_Wide_Character'Val (Number));
+        for Value in 1 .. Size loop
+            Number := Records.Read_Count (Tape);
+            if Value > 1 then
+                Alphabets.Include (Letters, Wide_Wide_Character'Val (Number));
+                end if;
+            --# Symbol 1 is always the unknown mark: its number is read and set aside.
             end loop;
         end Read_Alphabet;
 
     procedure Read_Neuron (
             Self : in out Brain;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             ) is
-        Kind   : constant String := Records.Read_Word (File);
-        Weight : constant Long_Float := Records.Read_Real (File);
+        Kind   : constant String := Records.Read_Word (Tape);
+        Weight : constant Long_Float := Records.Read_Real (Tape);
         Item   : Neurons.Neuron'Class := Neuron_Kinds.Blank_Of_Kind (Kind);
         begin
-        Item.Load (File);
+        Item.Load (Tape);
         Add_Neuron (Self, Item, Weight);
         end Read_Neuron;
 
     procedure Read_Brain (
             Self : in out Brain;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             ) is
         Letters : Alphabets.Alphabet;
         Version : Natural;
         Count   : Natural;
         begin
-        Records.Expect_Word (File, File_Mark);
-        Version := Records.Read_Count (File);
+        Records.Expect_Word (Tape, File_Mark);
+        Version := Records.Read_Count (Tape);
         if Version /= File_Version then
-            raise Records.Record_Error with "this file was saved by a different version";
+            raise Records.Record_Error with "this brain was saved by a different version";
             end if;
-        Read_Alphabet (Letters, File);
+        Read_Alphabet (Letters, Tape);
         Prepare (Self, Letters);
-        Self.Studied := Records.Read_Count (File);
-        Self.Learning_Rate := Records.Read_Real (File);
-        Count := Records.Read_Count (File);
+        Self.Studied := Records.Read_Count (Tape);
+        Self.Learning_Rate := Records.Read_Real (Tape);
+        Count := Records.Read_Count (Tape);
         for Index in 1 .. Count loop
-            Read_Neuron (Self, File);
+            Read_Neuron (Self, Tape);
             end loop;
         end Read_Brain;
-
-    procedure Open_Saved (
-            File      : in out Ada.Text_IO.File_Type;
-            File_Name : in     String
-            ) is
-        begin
-        Ada.Text_IO.Open (File, Ada.Text_IO.In_File, File_Name);
-        exception
-        when Ada.Text_IO.Name_Error | Ada.Text_IO.Use_Error =>
-            raise Records.Record_Error with "cannot open the file " & File_Name;
-        end Open_Saved;
 
     procedure Load (
             Self      : in out Brain;
             File_Name : in     String
             ) is
-        File : Ada.Text_IO.File_Type;
+        Tape : Records.Tape;
         begin
-        Open_Saved (File, File_Name);
-        Read_Brain (Self, File);
-        Ada.Text_IO.Close (File);
+        Records.Load (Tape, File_Name);
+        Read_Brain (Self, Tape);
         end Load;
+
+    procedure Thaw (
+            Self    : in out Brain;
+            Words   : in     Records.Word_List;
+            Figures : in     Records.Number_List
+            ) is
+        Tape : Records.Tape;
+        begin
+        Records.Fill (Tape, Words, Figures);
+        Read_Brain (Self, Tape);
+        end Thaw;
 
     overriding function Alphabet_Size (
             Self : in Brain

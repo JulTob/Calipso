@@ -15,8 +15,10 @@
 --  The write step happens ONLY when the real letter is known. When the brain is
 --  used to generate text, nothing is written.
 --
---  A brain can be saved to a file and loaded back, with its alphabet and the
---  number of lessons it has studied, to carry on later or to be compared.
+--  A brain can be saved to a file (a ".brn" file) and loaded back, with its
+--  alphabet and the number of lessons it has studied, to carry on later, to be
+--  compared or to be copied to another computer. The same file is also Ada
+--  source: it can be compiled into a program (see Thaw and Calipso.Records).
 
 with Ada.Containers.Indefinite_Vectors;
 
@@ -28,6 +30,7 @@ with Calipso.Neurons;
 with Calipso.Numbers;
 with Calipso.Oracles;
 with Calipso.Random_Sources;
+with Calipso.Records;
 with Calipso.Sources;
 with Calipso.Texts;
 
@@ -133,6 +136,15 @@ package Calipso.Brains is
             File_Name : in     String
             );
     --# Raises Records.Record_Error if the file is missing or is not a saved brain.
+
+    procedure Thaw (
+            Self    : in out Brain;
+            Words   : in     Records.Word_List;
+            Figures : in     Records.Number_List
+            );
+    --# The same as Load, for a brain file that was compiled into the program:
+    --# Words and Figures are the two constants (Words and Numbers) its package declares.
+    --# Raises Records.Record_Error if they are not a saved brain.
 
     overriding function Alphabet_Size (
             Self : in Brain

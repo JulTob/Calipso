@@ -1,4 +1,3 @@
-with Calipso.Records;
 
 package body Calipso.Counting_Oracles is
 
@@ -115,24 +114,24 @@ package body Calipso.Counting_Oracles is
         end Capacity;
 
     procedure Save (
-            Self : in Counting_Oracle;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Counting_Oracle;
+            Tape : in out Records.Tape
             ) is
         begin
-        Records.Write_Count (File, Natural (Self.Letter_Count));
-        Records.Write_Count (File, Self.Longest);
-        Fragment_Counts.Save (Self.Table, File);
+        Records.Write_Count (Tape, Natural (Self.Letter_Count));
+        Records.Write_Count (Tape, Self.Longest);
+        Fragment_Counts.Save (Self.Table, Tape);
         end Save;
 
     procedure Load (
             Self : in out Counting_Oracle;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             ) is
-        Letter_Count : constant Natural := Records.Read_Count (File);
-        Longest      : constant Natural := Records.Read_Count (File);
+        Letter_Count : constant Natural := Records.Read_Count (Tape);
+        Longest      : constant Natural := Records.Read_Count (Tape);
         begin
         Prepare (Self, Symbol (Letter_Count), Longest);
-        Fragment_Counts.Load (Self.Table, File);
+        Fragment_Counts.Load (Self.Table, Tape);
         end Load;
 
     procedure Train (

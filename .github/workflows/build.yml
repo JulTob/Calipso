@@ -43,39 +43,47 @@ jobs:
 
       - name: A brain studies, is saved, carries on and is compared - the same in Ada and in Python
         run: |
-          ./bin/calipso_brain study brain_ada.txt data/sample_es.txt 300 bias+position+decay > brain_ada_log.txt
-          ./bin/calipso_brain study brain_ada.txt data/sample_es.txt 300 >> brain_ada_log.txt
-          ./bin/calipso_brain study mixed_ada.txt data/sample_es.txt 200 counting+bias+harmonic >> brain_ada_log.txt
-          python3 reference/brain.py study brain_python.txt data/sample_es.txt 300 bias+position+decay > brain_python_log.txt
-          python3 reference/brain.py study brain_python.txt data/sample_es.txt 300 >> brain_python_log.txt
-          python3 reference/brain.py study mixed_python.txt data/sample_es.txt 200 counting+bias+harmonic >> brain_python_log.txt
+          ./bin/calipso_brain study brain_ada.brn data/sample_es.txt 300 bias+position+decay > brain_ada_log.txt
+          ./bin/calipso_brain study brain_ada.brn data/sample_es.txt 300 >> brain_ada_log.txt
+          ./bin/calipso_brain study mixed_ada.brn data/sample_es.txt 200 counting+bias+harmonic >> brain_ada_log.txt
+          python3 reference/brain.py study brain_python.brn data/sample_es.txt 300 bias+position+decay > brain_python_log.txt
+          python3 reference/brain.py study brain_python.brn data/sample_es.txt 300 >> brain_python_log.txt
+          python3 reference/brain.py study mixed_python.brn data/sample_es.txt 200 counting+bias+harmonic >> brain_python_log.txt
           cat brain_ada_log.txt
           sed -e 's/_python/_ada/g' brain_python_log.txt > brain_python_as_ada.txt
           diff brain_ada_log.txt brain_python_as_ada.txt
 
       - name: Each language can read the brains the other one saved
         run: |
-          ./bin/calipso_brain compare data/sample_es.txt brain_python.txt mixed_python.txt > cross_ada.txt
-          python3 reference/brain.py compare data/sample_es.txt brain_python.txt mixed_python.txt > cross_python.txt
-          ./bin/calipso_brain compare data/sample_es.txt brain_ada.txt mixed_ada.txt > own_ada.txt
-          python3 reference/brain.py compare data/sample_es.txt brain_ada.txt mixed_ada.txt > own_python.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_python.brn mixed_python.brn > cross_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_python.brn mixed_python.brn > cross_python.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.brn mixed_ada.brn > own_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_ada.brn mixed_ada.brn > own_python.txt
           cat cross_ada.txt
           diff cross_ada.txt cross_python.txt
           diff own_ada.txt own_python.txt
+
+      - name: A saved brain is also Ada - compile one into a program and compare
+        run: |
+          ./bin/calipso_brain study tests/frozen/frozen.brn data/sample_es.txt 20 counting+bias+position
+          head -30 tests/frozen/frozen.brn
+          wc -l -c tests/frozen/frozen.brn
+          time gprbuild -p -q -P tests/frozen/frozen.gpr
+          ./tests/frozen/bin/frozen_check tests/frozen/frozen.brn
 
       - name: The robot reads a small web site over real HTTP - the same in Ada and in Python
         run: |
           ./bin/calipso_serve tests/site 8765 > site_server.log 2>&1 &
           sleep 1
-          ./bin/calipso_crawl web_ada.txt tests/start_list.txt 10 > crawl_ada.txt
-          python3 reference/crawl.py web_python.txt tests/start_list.txt 10 > crawl_python.txt
+          ./bin/calipso_crawl web_ada.brn tests/start_list.txt 10 > crawl_ada.txt
+          python3 reference/crawl.py web_python.brn tests/start_list.txt 10 > crawl_python.txt
           cat crawl_ada.txt
-          cat web_ada.txt.finds.txt
+          cat web_ada.brn.finds.txt
           echo "What the site was asked for:"
           cat site_server.log
           sed -e 's/_python/_ada/g' crawl_python.txt > crawl_python_as_ada.txt
           diff crawl_ada.txt crawl_python_as_ada.txt
-          diff web_ada.txt.finds.txt web_python.txt.finds.txt
+          diff web_ada.brn.finds.txt web_python.brn.finds.txt
 
       - name: The panel - look, check the rules, train, hide and rebuild
         run: |
@@ -92,6 +100,7 @@ jobs:
           curl -s -X POST "$PANEL/train" -o /dev/null
           curl -s "$PANEL/view?address=$SITE%2Fsub%2Fc.html" -o /dev/null
           curl -s "$PANEL/hide?block=4" -o panel_4_rebuilt.html
+          curl -s "$PANEL/hide?block=4&part=half" -o panel_4b_half.html
           curl -s "$PANEL/view?address=$SITE%2Fprivate%2Fsecret.html" -o panel_5_refused.html
           curl -s "$PANEL/view?address=$SITE%2Fpicture.png" -o panel_6_picture.html
           curl -s "$PANEL/view?address=$SITE%2Fnotes.txt" -o panel_7_notes.html

@@ -33,9 +33,11 @@ with Calipso.Fragment_Counts;
 with Calipso.Memory_Sources;
 with Calipso.Neuron_Kinds;
 with Calipso.Neurons;
+with Calipso.Numbers;
 with Calipso.Oracles;
 with Calipso.Pages;
 with Calipso.Random_Sources;
+with Calipso.Records;
 with Calipso.Repairing;
 with Calipso.Robots;
 with Calipso.Templates;
@@ -60,8 +62,9 @@ procedure Calipso_Tests is
         & "el oso de la rosa es el oso de la casa. la casa del oso es la costa.";
 
     Test_Longest : constant Positive := 5;
-    Saved_Brain  : constant String := "brain_test_saved.txt";
-    Python_Brain : constant String := "tests/data/brain_from_python.txt";
+    Saved_Brain  : constant String := "brain_test_saved.brn";
+    Saved_Tape   : constant String := "tape_test_saved.brn";
+    Python_Brain : constant String := "tests/data/brain_from_python.brn";
     Sample_File  : constant String := "data/sample_es.txt";
     Test_Site    : constant String := "http://test.site";
     Site_Folder  : constant String := "tests/site";
@@ -599,6 +602,37 @@ procedure Calipso_Tests is
         Check ("file source: the first piece is the start of the file", First_Matches);
         end Test_Sources;
 
+    procedure Test_Records is
+        Tape  : Records.Tape;
+        Back  : Records.Tape;
+        Row   : Numbers.Real_Row := Numbers.Zeros (4);
+        Count : Natural;
+        Real  : Long_Float;
+        begin
+        Row.Replace_Element (2, 2.5);
+        Row.Replace_Element (4, -1.0);
+        Records.Write_Word (Tape, "first");
+        Records.Write_Count (Tape, 144);
+        Records.Write_Real (Tape, -0.125);
+        Records.Write_Reals (Tape, Row);
+        Records.Save (Tape, Saved_Tape);
+        Records.Load (Back, Saved_Tape);
+        Ada.Directories.Delete_File (Saved_Tape);
+        Check ("a word comes back from the file", Records.Read_Word (Back) = "first");
+        Count := Records.Read_Count (Back);
+        Check ("a whole number comes back", Count = 144);
+        Real := Records.Read_Real (Back);
+        Check ("a real number comes back exactly", Real = -0.125);
+        Row := Records.Read_Reals (Back);
+        Check (
+            "a sparse row comes back with its zeros",
+            Natural (Row.Length) = 4 and then Row.Element (1) = 0.0
+            and then Row.Element (2) = 2.5 and then Row.Element (4) = -1.0
+            );
+        Check ("the package name of a brain file", Records.Unit_Name_For ("brains/page.brn") = "Page_Brain");
+        Check ("marks in the file name become underlines", Records.Unit_Name_For ("my-page.2.brn") = "My_Page_2_Brain");
+        end Test_Records;
+
     procedure Test_Web_Addresses is
         Base : constant String := "http://test.site/sub/c.html?x=1";
         begin
@@ -772,6 +806,7 @@ procedure Calipso_Tests is
     Run_Group ("Blind spots", Test_Blind_Spots'Access);
     Run_Group ("Bounded memory", Test_Bounded_Memory'Access);
     Run_Group ("Neurons that measure distance", Test_Basis_Neurons'Access);
+    Run_Group ("Brain files", Test_Records'Access);
     Run_Group ("Brains", Test_Brains'Access);
     Run_Group ("Criteria", Test_Criteria'Access);
     Run_Group ("Sources", Test_Sources'Access);

@@ -10,12 +10,12 @@
 --  widen it one neighbour at a time, alternating left and right. Each
 --  wider window corrects the opinion of the previous one.
 
-with Ada.Text_IO;
 
 with Calipso.Canvases;
 with Calipso.Distributions;
 with Calipso.Fragment_Counts;
 with Calipso.Oracles;
+with Calipso.Records;
 with Calipso.Texts;
 
 package Calipso.Counting_Oracles is
@@ -44,13 +44,13 @@ package Calipso.Counting_Oracles is
             ) return Natural;
 
     procedure Save (
-            Self : in Counting_Oracle;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Counting_Oracle;
+            Tape : in out Records.Tape
             );
 
     procedure Load (
             Self : in out Counting_Oracle;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             );
 
     procedure Train (

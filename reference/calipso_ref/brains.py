@@ -208,49 +208,47 @@ def Save(
         brain: Brain,
         file_name: str
         ) -> None:
-    with open(file_name, "w", encoding="utf-8", newline="\n") as out:
-        records.Write_Word(out, FILE_MARK)
-        records.Write_Count(out, FILE_VERSION)
-        size = alphabets.Size(brain.letters)
-        records.Write_Count(out, size)
-        for symbol in range(1, size + 1):
-            records.Write_Count(out, ord(alphabets.Character_Of(brain.letters, symbol)))
-            #-- Each letter is saved as its Unicode number.
-        records.Write_Count(out, brain.lessons)
-        records.Write_Real(out, brain.learning_rate)
-        records.Write_Count(out, Neuron_Count(brain))
-        for index in range(0, Neuron_Count(brain)):
-            records.Write_Word(out, brain.neurons[index].Kind())
-            records.Write_Real(out, brain.weights[index])
-            brain.neurons[index].Save(out)
+    out = records.Tape()
+    records.Write_Word(out, FILE_MARK)
+    records.Write_Count(out, FILE_VERSION)
+    size = alphabets.Size(brain.letters)
+    records.Write_Count(out, size)
+    for symbol in range(1, size + 1):
+        records.Write_Count(out, ord(alphabets.Character_Of(brain.letters, symbol)))
+        #-- Each letter is saved as its Unicode number.
+    records.Write_Count(out, brain.lessons)
+    records.Write_Real(out, brain.learning_rate)
+    records.Write_Count(out, Neuron_Count(brain))
+    for index in range(0, Neuron_Count(brain)):
+        records.Write_Word(out, brain.neurons[index].Kind())
+        records.Write_Real(out, brain.weights[index])
+        brain.neurons[index].Save(out)
+    records.Save(out, file_name)
 
 
 def Load(
         brain: Brain,
         file_name: str
         ) -> None:
-    try:
-        source = open(file_name, encoding="utf-8")
-    except OSError as problem:
-        raise records.Record_Error(f"cannot open {file_name}: {problem}")
-    with source:
-        records.Expect_Word(source, FILE_MARK)
-        version = records.Read_Count(source)
-        if version != FILE_VERSION:
-            raise records.Record_Error("this file was saved by a different version")
-        size = records.Read_Count(source)
-        letters = alphabets.Alphabet()
-        records.Read_Count(source)
-        #-- Symbol 1 is always the unknown mark: its line is read and set aside.
-        for _ in range(2, size + 1):
-            alphabets.Include(letters, chr(records.Read_Count(source)))
-        Prepare(brain, letters)
-        brain.lessons = records.Read_Count(source)
-        brain.learning_rate = records.Read_Real(source)
-        count = records.Read_Count(source)
-        for _ in range(0, count):
-            kind = records.Read_Word(source)
-            weight = records.Read_Real(source)
-            neuron = neuron_kinds.Blank_Of_Kind(kind)
-            neuron.Load(source)
-            Add_Neuron(brain, neuron, weight)
+    source = records.Load(file_name)
+    records.Expect_Word(source, FILE_MARK)
+    version = records.Read_Count(source)
+    if version != FILE_VERSION:
+        raise records.Record_Error("this brain was saved by a different version")
+    size = records.Read_Count(source)
+    letters = alphabets.Alphabet()
+    for symbol in range(1, size + 1):
+        number = records.Read_Count(source)
+        if symbol > 1:
+            alphabets.Include(letters, chr(number))
+        #-- Symbol 1 is always the unknown mark: its number is read and set aside.
+    Prepare(brain, letters)
+    brain.lessons = records.Read_Count(source)
+    brain.learning_rate = records.Read_Real(source)
+    count = records.Read_Count(source)
+    for _ in range(0, count):
+        kind = records.Read_Word(source)
+        weight = records.Read_Real(source)
+        neuron = neuron_kinds.Blank_Of_Kind(kind)
+        neuron.Load(source)
+        Add_Neuron(brain, neuron, weight)

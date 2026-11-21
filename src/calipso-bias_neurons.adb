@@ -1,4 +1,3 @@
-with Calipso.Records;
 
 package body Calipso.Bias_Neurons is
 
@@ -66,21 +65,21 @@ package body Calipso.Bias_Neurons is
         end Learn_From_Cell;
 
     overriding procedure Save (
-            Self : in Bias_Neuron;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Bias_Neuron;
+            Tape : in out Records.Tape
             ) is
         begin
-        Records.Write_Count (File, Natural (Self.Letter_Count));
-        Records.Write_Reals (File, Self.Points);
+        Records.Write_Count (Tape, Natural (Self.Letter_Count));
+        Records.Write_Reals (Tape, Self.Points);
         end Save;
 
     overriding procedure Load (
             Self : in out Bias_Neuron;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             ) is
         begin
-        Self.Letter_Count := Symbol (Records.Read_Count (File));
-        Self.Points := Records.Read_Reals (File);
+        Self.Letter_Count := Symbol (Records.Read_Count (Tape));
+        Self.Points := Records.Read_Reals (Tape);
         end Load;
 
     end Calipso.Bias_Neurons;

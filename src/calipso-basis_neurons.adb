@@ -1,7 +1,6 @@
 with Ada.Numerics;
 with Ada.Numerics.Long_Elementary_Functions;
 
-with Calipso.Records;
 
 package body Calipso.Basis_Neurons is
 
@@ -250,28 +249,28 @@ package body Calipso.Basis_Neurons is
         end Learn_From_Cell;
 
     overriding procedure Save (
-            Self : in Basis_Neuron;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Basis_Neuron;
+            Tape : in out Records.Tape
             ) is
         begin
-        Records.Write_Word (File, Word_Of (Self.Measure));
-        Records.Write_Count (File, Natural (Self.Letter_Count));
-        Records.Write_Count (File, Self.Vote_Reach);
-        Records.Write_Count (File, Self.Detail);
-        Records.Write_Reals (File, Self.Votes);
+        Records.Write_Word (Tape, Word_Of (Self.Measure));
+        Records.Write_Count (Tape, Natural (Self.Letter_Count));
+        Records.Write_Count (Tape, Self.Vote_Reach);
+        Records.Write_Count (Tape, Self.Detail);
+        Records.Write_Reals (Tape, Self.Votes);
         end Save;
 
     overriding procedure Load (
             Self : in out Basis_Neuron;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             ) is
-        Word         : constant String := Records.Read_Word (File);
-        Letter_Count : constant Natural := Records.Read_Count (File);
-        Reach        : constant Natural := Records.Read_Count (File);
-        Detail       : constant Natural := Records.Read_Count (File);
+        Word         : constant String := Records.Read_Word (Tape);
+        Letter_Count : constant Natural := Records.Read_Count (Tape);
+        Reach        : constant Natural := Records.Read_Count (Tape);
+        Detail       : constant Natural := Records.Read_Count (Tape);
         begin
         Prepare (Self, Symbol (Letter_Count), Measure_Of (Word), Reach, Detail);
-        Self.Votes := Records.Read_Reals (File);
+        Self.Votes := Records.Read_Reals (Tape);
         end Load;
 
     end Calipso.Basis_Neurons;

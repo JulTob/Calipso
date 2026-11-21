@@ -1,14 +1,22 @@
---  Write and read saved brains as plain text.
+--  How a brain is written down: the tape, and the brain file.
 --
---  A saved brain is a text file with ONE item per line: a word, a whole number
---  or a real number. Dull on purpose: any editor can open it, and Ada and
---  Python read each other's files.
+--  Everything a brain knows is written, in order, onto a TAPE: a list of short
+--  words ("bias", "position") and a list of numbers. Reading the tape back in
+--  the same order gives the same brain.
 --
---  Real numbers are written with 17 significant digits, which is enough to get
---  back exactly the same number. A long row of numbers is saved "sparse": only
---  the entries that are not zero, each with its position.
+--  A tape can be kept in a file. That file (a ".brn" file) is two things at once:
+--
+--     data : Calipso reads it line by line when a brain is loaded. No compiler
+--            is involved, and the brain can go on learning and be saved again.
+--
+--     Ada  : the same file is the specification of an Ada package that holds
+--            two constants, Words and Numbers. It can be compiled into a
+--            program, and the brain is then inside the program itself (Fill).
+--
+--  The file is written by Calipso in a fixed layout, one item per line, so
+--  that reading it as data needs no knowledge of Ada.
 
-with Ada.Text_IO;
+with Ada.Containers.Indefinite_Vectors;
 
 with Calipso.Numbers;
 
@@ -17,47 +25,102 @@ package Calipso.Records is
     Record_Error : exception;
     --# The file is missing, ends too soon, or does not hold what was expected.
 
+    Word_Length : constant := 16;
+
+    subtype Word is String (1 .. Word_Length);
+    --# A word of the tape, with spaces after it up to its fixed length.
+
+    type Word_List is array (Positive range <>) of Word;
+    type Number_List is array (Positive range <>) of Long_Float;
+    --# The shapes of the two constants a brain file declares.
+
+    type Tape is private;
+    --# A newly declared tape is empty.
+
     procedure Write_Word (
-            File : in Ada.Text_IO.File_Type;
-            Word : in String
-            );
+            Onto : in out Tape;
+            Item : in     String
+            )
+        with Pre => Item'Length in 1 .. Word_Length;
 
     procedure Write_Count (
-            File  : in Ada.Text_IO.File_Type;
-            Count : in Natural
+            Onto  : in out Tape;
+            Count : in     Natural
             );
 
     procedure Write_Real (
-            File  : in Ada.Text_IO.File_Type;
-            Value : in Long_Float
+            Onto  : in out Tape;
+            Value : in     Long_Float
             );
 
     procedure Write_Reals (
-            File   : in Ada.Text_IO.File_Type;
-            Values : in Numbers.Real_Row
+            Onto   : in out Tape;
+            Values : in     Numbers.Real_Row
             );
+    --# A long row is written "sparse": only the entries that are not zero,
+    --# each with its position.
 
     function Read_Word (
-            File : in Ada.Text_IO.File_Type
+            From : in out Tape
             ) return String;
     --# The reading operations are functions for convenience, although each one
-    --# moves the file forward: a file is outside state by nature.
+    --# moves the tape forward. Use one per statement.
 
     function Read_Count (
-            File : in Ada.Text_IO.File_Type
+            From : in out Tape
             ) return Natural;
 
     function Read_Real (
-            File : in Ada.Text_IO.File_Type
+            From : in out Tape
             ) return Long_Float;
 
     function Read_Reals (
-            File : in Ada.Text_IO.File_Type
+            From : in out Tape
             ) return Numbers.Real_Row;
 
     procedure Expect_Word (
-            File   : in Ada.Text_IO.File_Type;
-            Wanted : in String
+            From   : in out Tape;
+            Wanted : in     String
             );
+
+    procedure Save (
+            Self      : in Tape;
+            File_Name : in String
+            );
+    --# Writes the tape as a brain file. Raises Record_Error if it cannot be written.
+
+    procedure Load (
+            Self      :    out Tape;
+            File_Name : in     String
+            );
+    --# Reads a brain file as data. Raises Record_Error if it is missing or damaged.
+
+    procedure Fill (
+            Self         :    out Tape;
+            From_Words   : in     Word_List;
+            From_Numbers : in     Number_List
+            );
+    --# Takes the tape from the two constants of a brain file that was compiled
+    --# into the program.
+
+    function Unit_Name_For (
+            File_Name : in String
+            ) return String;
+    --# The name of the Ada package a brain file declares: "brains/page.brn" -> "Page_Brain".
+
+private
+
+    package Word_Vectors is new Ada.Containers.Indefinite_Vectors (
+            Index_Type   => Positive,
+            Element_Type => String
+            );
+
+    type Tape is record
+        Words     : Word_Vectors.Vector;
+        Reals     : Numbers.Real_Row;
+        Next_Word : Positive := 1;
+        Next_Real : Positive := 1;
+        --# Where the next reading takes from.
+        end record;
 
     end Calipso.Records;

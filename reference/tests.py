@@ -26,6 +26,7 @@ from calipso_ref import fragment_counts
 from calipso_ref import neuron_kinds
 from calipso_ref import pages
 from calipso_ref import random_sources
+from calipso_ref import records
 from calipso_ref import repairing
 from calipso_ref import robots
 from calipso_ref import sources
@@ -39,8 +40,9 @@ CORPUS_TEXT = (
     "el oso de la rosa es el oso de la casa. la casa del oso es la costa."
     )
 TEST_LONGEST = 5
-SAVED_BRAIN = "brain_test_saved.txt"
-PYTHON_BRAIN = "tests/data/brain_from_python.txt"
+SAVED_BRAIN = "brain_test_saved.brn"
+SAVED_TAPE = "tape_test_saved.brn"
+PYTHON_BRAIN = "tests/data/brain_from_python.brn"
 SAMPLE_FILE = "data/sample_es.txt"
 TEST_SITE = "http://test.site"
 SITE_FOLDER = "tests/site"
@@ -487,6 +489,26 @@ def Test_Sources(
     Check(fixture, "file source: the first piece is the start of the file", first_matches)
 
 
+def Test_Records(
+        fixture: Fixture
+        ) -> None:
+    tape = records.Tape()
+    records.Write_Word(tape, "first")
+    records.Write_Count(tape, 144)
+    records.Write_Real(tape, -0.125)
+    records.Write_Reals(tape, [0.0, 2.5, 0.0, -1.0])
+    records.Save(tape, SAVED_TAPE)
+    back = records.Load(SAVED_TAPE)
+    os.remove(SAVED_TAPE)
+    Check(fixture, "a word comes back from the file", records.Read_Word(back) == "first")
+    Check(fixture, "a whole number comes back", records.Read_Count(back) == 144)
+    Check(fixture, "a real number comes back exactly", records.Read_Real(back) == -0.125)
+    row = records.Read_Reals(back)
+    Check(fixture, "a sparse row comes back with its zeros", len(row) == 4 and row[0] == 0.0 and row[1] == 2.5 and row[3] == -1.0)
+    Check(fixture, "the package name of a brain file", records.Unit_Name_For("brains/page.brn") == "Page_Brain")
+    Check(fixture, "marks in the file name become underlines", records.Unit_Name_For("my-page.2.brn") == "My_Page_2_Brain")
+
+
 def Test_Web_Addresses(
         fixture: Fixture
         ) -> None:
@@ -621,6 +643,7 @@ def Main() -> None:
         ("Blind spots", Test_Blind_Spots),
         ("Bounded memory", Test_Bounded_Memory),
         ("Neurons that measure distance", Test_Basis_Neurons),
+        ("Brain files", Test_Records),
         ("Brains", Test_Brains),
         ("Criteria", Test_Criteria),
         ("Sources", Test_Sources),

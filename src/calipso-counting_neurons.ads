@@ -7,12 +7,12 @@
 --
 --  It learns from text (it counts fragments), not from errors.
 
-with Ada.Text_IO;
 
 with Calipso.Canvases;
 with Calipso.Counting_Oracles;
 with Calipso.Distributions;
 with Calipso.Neurons;
+with Calipso.Records;
 with Calipso.Texts;
 
 package Calipso.Counting_Neurons is
@@ -53,13 +53,13 @@ package Calipso.Counting_Neurons is
             );
 
     overriding procedure Save (
-            Self : in Counting_Neuron;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Counting_Neuron;
+            Tape : in out Records.Tape
             );
 
     overriding procedure Load (
             Self : in out Counting_Neuron;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             );
 
 private

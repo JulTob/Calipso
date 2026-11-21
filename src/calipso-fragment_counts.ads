@@ -10,8 +10,8 @@
 with Ada.Containers;
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Containers.Vectors;
-with Ada.Text_IO;
 
+with Calipso.Records;
 with Calipso.Texts;
 
 package Calipso.Fragment_Counts is
@@ -68,15 +68,15 @@ package Calipso.Fragment_Counts is
     --# Walks the text and notes every fragment from 1 to Longest letters.
 
     procedure Save (
-            Table : in Count_Table;
-            File  : in Ada.Text_IO.File_Type
+            Table : in     Count_Table;
+            Tape  : in out Records.Tape
             );
     --# Bounded memory: the counters in use, each with its place.
     --# Exact memory: every fragment (its length, its symbols) and its count.
 
     procedure Load (
             Table : in out Count_Table;
-            File  : in     Ada.Text_IO.File_Type
+            Tape  : in out Records.Tape
             );
 
 private

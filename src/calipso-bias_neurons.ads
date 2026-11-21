@@ -3,12 +3,12 @@
 --  It holds one number per letter: its starting points, whatever the
 --  surroundings. It learns how frequent each letter is.
 
-with Ada.Text_IO;
 
 with Calipso.Canvases;
 with Calipso.Distributions;
 with Calipso.Neurons;
 with Calipso.Numbers;
+with Calipso.Records;
 
 package Calipso.Bias_Neurons is
 
@@ -48,13 +48,13 @@ package Calipso.Bias_Neurons is
             );
 
     overriding procedure Save (
-            Self : in Bias_Neuron;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Bias_Neuron;
+            Tape : in out Records.Tape
             );
 
     overriding procedure Load (
             Self : in out Bias_Neuron;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             );
 
 private

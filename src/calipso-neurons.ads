@@ -12,10 +12,10 @@
 --                       ("errors") and corrects its own numbers.
 --     Learn_From_Text : it is shown a piece of real text and remembers it.
 
-with Ada.Text_IO;
 
 with Calipso.Canvases;
 with Calipso.Distributions;
+with Calipso.Records;
 with Calipso.Texts;
 
 package Calipso.Neurons is
@@ -62,13 +62,13 @@ package Calipso.Neurons is
             ) is null;
 
     procedure Save (
-            Self : in Neuron;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Neuron;
+            Tape : in out Records.Tape
             ) is abstract;
 
     procedure Load (
             Self : in out Neuron;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             ) is abstract;
 
     function Is_Voter (

@@ -8,6 +8,8 @@
 --     - a Train button, which works only when the rules allow the address
 --     - "hide": a paragraph becomes a hole and the brain builds something in
 --       its place from the text around it, shown next to what was really there
+--       (a writing test). "hide half" hides only half of its letters, so the
+--       brain has something to hold on to (a recovery test).
 --
 --  There is one brain per kind of file ("sense"): page.brn for web pages,
 --  py.brn for Python code, svg.brn for drawings written as text... Each is kept
@@ -65,6 +67,8 @@ private
         Hidden   : Natural := 0;
         Right    : Natural := 0;
         Seed     : Natural := 1;
+        Half     : Boolean := False;
+        --# False: the whole piece was hidden. True: half of its letters, chosen by chance.
         end record;
     --# The last "hide and rebuild" test.
 

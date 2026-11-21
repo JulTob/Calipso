@@ -393,7 +393,8 @@ package body Calipso.Panels is
             Number : in     Positive;
             First  : in     Positive;
             Last   : in     Natural;
-            Seed   : in     Natural
+            Seed   : in     Natural;
+            Half   : in     Boolean
             ) is
         Window_First : constant Positive := Integer'Max (1, First - Margin);
         Window_Last  : constant Natural := Natural'Min (Natural (Text.Length), Last + Margin);
@@ -406,9 +407,13 @@ package body Calipso.Panels is
         Guide        : constant Criteria.Certainty := (null record);
         Score        : Blind_Spots.Score;
         Rebuilt      : Texts.Wide_Text;
+        Chance       : Random_Sources.Unit_Fraction;
         begin
         for Position in First - Shift .. Last - Shift loop
-            Canvases.Hide (Board, Position);
+            Random_Sources.Draw_Unit (Dice, Chance);
+            if not Half or else Chance < 0.5 then
+                Canvases.Hide (Board, Position);
+                end if;
             end loop;
         Collapsing.Collapse_By (Board, Self.Brain, Dice, Guide);
         Score := Blind_Spots.Scored (Board, Original);
@@ -421,16 +426,19 @@ package body Calipso.Panels is
             Rebuilt  => Rebuilt,
             Hidden   => Score.Hidden,
             Right    => Score.Recovered,
-            Seed     => Seed
+            Seed     => Seed,
+            Half     => Half
             );
         end Fill_Hole;
-    --# The brain sees the piece as a hole, with some text before and after it,
-    --# and collapses the hole letter by letter, the surest letter first.
+    --# The brain sees the piece as a hole (or as a text with half its letters
+    --# missing), with some text before and after it, and collapses the holes
+    --# letter by letter, the surest letter first.
 
     procedure Rebuild (
             Self   : in out Panel;
             Number : in     Natural;
-            Seed   : in     Natural
+            Seed   : in     Natural;
+            Half   : in     Boolean
             ) is
         First : Positive;
         Last  : Natural;
@@ -454,7 +462,7 @@ package body Calipso.Panels is
             end if;
         Find_Brain (Self, Sense (Self));
         Locate (Self, Number, First, Last);
-        Fill_Hole (Self, Page_Symbols (Self), Number, First, Last, Seed);
+        Fill_Hole (Self, Page_Symbols (Self), Number, First, Last, Seed, Half);
         if Brains.Lessons_Studied (Self.Brain) = 0 then
             Say (Self, "This brain has not studied anything yet, so what it builds is pure chance. Train it and try again.");
         else
@@ -579,6 +587,19 @@ package body Calipso.Panels is
         Put (Page, "</section>");
         end Put_Brain;
 
+    function Hide_Link (
+            Number : in Positive;
+            Half   : in Boolean;
+            Seed   : in Natural;
+            Words  : in String
+            ) return String is
+        Part : constant String := (if Half then "&amp;part=half" else "");
+        begin
+        return "<a class=""hide"" href=""/hide?block=" & Image (Number) & Part
+            & "&amp;seed=" & Image (Seed) & "#trial"">" & Words & "</a>";
+        end Hide_Link;
+    --# The link that asks the panel to hide piece Number.
+
     procedure Put_Trial (
             Self   : in     Panel;
             Page   : in out Unbounded_String;
@@ -587,14 +608,17 @@ package body Calipso.Panels is
         Shot : constant Trial := Self.Last_Trial;
         begin
         Put (Page, "<div class=""trial"" id=""trial"">");
-        Put (Page, "<div class=""label"">What the brain built in its place</div>");
+        if Shot.Half then
+            Put (Page, "<div class=""label"">Half of the letters were hidden. The brain filled them in</div>");
+        else
+            Put (Page, "<div class=""label"">What the brain built in its place</div>");
+            end if;
         Put (Page, "<p class=""built"">" & Shown (Shot.Rebuilt) & "</p>");
         Put (Page, "<div class=""label"">What was really there</div>");
         Put (Page, "<p class=""real"">" & Shown (Self.Content.Blocks.Element (Number).Text) & "</p>");
         Put (Page, "<div class=""score"">" & Image (Shot.Right) & " of " & Image (Shot.Hidden)
-            & " letters right (" & Percent_Image (Shot.Right, Shot.Hidden) & " %) &middot; "
-            & "<a href=""/hide?block=" & Image (Number) & "&amp;seed=" & Image (Shot.Seed + 1)
-            & "#trial"">try again</a></div>");
+            & " hidden letters right (" & Percent_Image (Shot.Right, Shot.Hidden) & " %) &middot; "
+            & Hide_Link (Number, Shot.Half, Shot.Seed + 1, "try again") & "</div>");
         Put (Page, "</div>");
         end Put_Trial;
 
@@ -604,8 +628,8 @@ package body Calipso.Panels is
             Number : in     Positive
             ) is
         Piece : constant Pages.Block := Self.Content.Blocks.Element (Number);
-        Hide  : constant String :=
-            " <a class=""hide"" href=""/hide?block=" & Image (Number) & "#trial"">hide</a>";
+        Hide  : constant String := " " & Hide_Link (Number, False, 1, "hide");
+        Half  : constant String := " " & Hide_Link (Number, True, 1, "hide half");
         begin
         if Self.Last_Trial.Is_Shown and then Self.Last_Trial.Block = Number then
             Put_Trial (Self, Page, Number);
@@ -613,7 +637,7 @@ package body Calipso.Panels is
             end if;
         case Piece.Kind is
             when Pages.Words =>
-                Put (Page, "<p class=""block"">" & Shown (Piece.Text) & Hide & "</p>");
+                Put (Page, "<p class=""block"">" & Shown (Piece.Text) & Hide & Half & "</p>");
             when Pages.Picture =>
                 Put (Page, "<div class=""media"">Picture: " & Shown (Piece.Text) & Hide & "</div>");
             when Pages.Video =>
@@ -636,7 +660,7 @@ package body Calipso.Panels is
             end if;
         Put (Page, "<section><h2>The page, as the robot reads it</h2>");
         Put (Page, "<p class=""small"">Press <i>hide</i> on a piece: the brain will build something in its place "
-            & "from the text around it.</p>");
+            & "from the text around it. <i>hide half</i> hides only half of its letters.</p>");
         for Number in 1 .. Natural'Min (Count, Most_Blocks) loop
             Put_Block (Self, Page, Number);
             end loop;
@@ -740,7 +764,12 @@ package body Calipso.Panels is
         elsif Path = "/train" then
             Train (Self);
         elsif Path = "/hide" then
-            Rebuild (Self, Number_In (Web_Servers.Field (Fields, "block")), Natural'Max (Seed, 1));
+            Rebuild (
+                Self,
+                Number_In (Web_Servers.Field (Fields, "block")),
+                Natural'Max (Seed, 1),
+                Web_Servers.Field (Fields, "part") = "half"
+                );
             end if;
         exception
         when Problem : Records.Record_Error | Texts.Reading_Error | Neuron_Kinds.Recipe_Error =>

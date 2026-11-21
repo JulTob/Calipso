@@ -17,12 +17,12 @@
 --                   Laplace transform. Fast fading sees only the next letter;
 --                   slow fading sees far, blurred. One set looks left, one right.
 
-with Ada.Text_IO;
 
 with Calipso.Canvases;
 with Calipso.Distributions;
 with Calipso.Neurons;
 with Calipso.Numbers;
+with Calipso.Records;
 
 package Calipso.Basis_Neurons is
 
@@ -77,13 +77,13 @@ package Calipso.Basis_Neurons is
             );
 
     overriding procedure Save (
-            Self : in Basis_Neuron;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Basis_Neuron;
+            Tape : in out Records.Tape
             );
 
     overriding procedure Load (
             Self : in out Basis_Neuron;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             );
 
 private

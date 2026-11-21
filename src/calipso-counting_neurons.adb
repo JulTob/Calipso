@@ -68,19 +68,19 @@ package body Calipso.Counting_Neurons is
         end Learn_From_Text;
 
     overriding procedure Save (
-            Self : in Counting_Neuron;
-            File : in Ada.Text_IO.File_Type
+            Self : in     Counting_Neuron;
+            Tape : in out Records.Tape
             ) is
         begin
-        Counting_Oracles.Save (Self.Oracle, File);
+        Counting_Oracles.Save (Self.Oracle, Tape);
         end Save;
 
     overriding procedure Load (
             Self : in out Counting_Neuron;
-            File : in     Ada.Text_IO.File_Type
+            Tape : in out Records.Tape
             ) is
         begin
-        Counting_Oracles.Load (Self.Oracle, File);
+        Counting_Oracles.Load (Self.Oracle, Tape);
         end Load;
 
     end Calipso.Counting_Neurons;
