@@ -28,6 +28,11 @@ package Calipso.Basis_Neurons is
 
     type Basis_Kind is (By_Position, By_Harmonic, By_Decay);
 
+    Default_Reach  : constant Positive := 12;
+    --# How many letters each way a neuron looks, unless the recipe says otherwise.
+    Default_Waves  : constant Natural := 4;
+    Default_Speeds : constant Natural := 4;
+
     type Basis_Neuron is new Neurons.Neuron with private;
 
     procedure Prepare (

@@ -17,6 +17,9 @@ with Calipso.Texts;
 
 package Calipso.Counting_Neurons is
 
+    Default_Memory : constant Positive := 1_048_576;
+    --# How many counters the "memory" neuron has, unless the recipe says otherwise.
+
     type Counting_Neuron is new Neurons.Neuron with private;
 
     procedure Prepare (

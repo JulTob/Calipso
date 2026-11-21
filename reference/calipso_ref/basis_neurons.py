@@ -24,6 +24,11 @@ from . import canvases
 from . import neurons
 from . import records
 
+DEFAULT_REACH = 12
+#-- How many letters each way a neuron looks, unless the recipe says otherwise.
+DEFAULT_WAVES = 4
+DEFAULT_SPEEDS = 4
+
 BY_POSITION = 0
 BY_HARMONIC = 1
 BY_DECAY = 2
@@ -47,9 +52,13 @@ class Basis_Neuron(neurons.Neuron):
         #-- votes[curve, neighbour letter, candidate letter], all in one long row. See Vote_Slot.
 
     def Name(self) -> str:
+        if self.kind == BY_POSITION:
+            return neurons.With_Sizes("position", self.reach, DEFAULT_REACH, 0, 0)
         if self.kind == BY_HARMONIC and self.detail == 0:
-            return "presence"
-        return KIND_WORDS[self.kind]
+            return neurons.With_Sizes("presence", self.reach, DEFAULT_REACH, 0, 0)
+        if self.kind == BY_HARMONIC:
+            return neurons.With_Sizes("harmonic", self.reach, DEFAULT_REACH, self.detail, DEFAULT_WAVES)
+        return neurons.With_Sizes("decay", self.reach, DEFAULT_REACH, self.detail, DEFAULT_SPEEDS)
 
     def Kind(self) -> str:
         return "basis"

@@ -15,6 +15,17 @@ studying IS the pause between requests.
 Nothing is fetched twice. An address that is linked again is not listed
 again; it only gets one more "mention", a count of how many links point to it.
 
+Everything has a fixed size, chosen in the settings, so that a long walk
+never needs more memory than a short one:
+
+   the waiting list : the addresses still to visit. When it is full, new
+                      links are left out until there is room again.
+   the seen table   : which addresses are already known, and their mentions.
+                      It works like the bounded memory of the brain: each
+                      address has one place, with a check number saying whose
+                      it is, and a newcomer wears the owner down before taking
+                      the place. An address forgotten this way may be read again.
+
 What is not a page is not thrown away: its address is filed under its kind
 (writing, picture, video, sound...), ready for the brain of that kind.
 """
@@ -31,6 +42,12 @@ from . import web_addresses
 
 LINE_FEED = "\n"
 ROBOTS_PATH = "/robots.txt"
+HASH_PRIME = 16777619
+HASH_MASK = (1 << 32) - 1
+PLACE_START = 2166136261
+CHECK_START = 3141592653
+#-- The same scrambling recipe as the count table of the brain (FNV-1a), from
+#-- two starting numbers: one gives the place of an address, the other its check number.
 
 
 class Settings:
@@ -45,6 +62,13 @@ class Settings:
         #-- The least time between two requests.
         self.same_site_only = True
         #-- Follow only links that stay on the site of the page they are in.
+        self.list_size = 1024
+        #-- The most addresses that wait for a visit at once. Also the most
+        #-- addresses filed under each kind of thing that is not a page.
+        self.seen_size = 65536
+        #-- How many addresses it can remember having seen.
+        self.time_limit = 0.0
+        #-- Seconds after which no new page is asked for. 0 = no limit.
 
 
 class Tally:
@@ -61,6 +85,8 @@ class Tally:
         self.not_text = 0
         #-- Asked for, but what arrived was not a page.
         self.failed = 0
+        self.left_out = 0
+        #-- Links not kept because a list was full or their place was taken.
 
 
 class Web_Source(sources.Source):
@@ -70,11 +96,16 @@ class Web_Source(sources.Source):
         self.letters = None
         self.settings = Settings()
         self.work_file = ""
-        self.queue = []
-        #-- Every address listed for a visit, in order.
-        self.next_in_queue = 0
-        self.mentions = {}
-        #-- address -> how many times it has been pointed to. Also: "have I seen it?"
+        self.waiting = []
+        #-- The waiting list: a ring of list_size places.
+        self.first = 0
+        #-- The place of the address that has waited longest.
+        self.count = 0
+        #-- How many addresses are waiting.
+        self.seen_checks = []
+        self.seen_counts = []
+        #-- The seen table: for each place, whose it is and how many mentions it has.
+        self.started = 0.0
         self.finds = {}
         #-- kind -> addresses of that kind that were found.
         for kind in web_addresses.ALL_KINDS:
@@ -112,6 +143,106 @@ def Open(
     source.letters = letters
     source.settings = settings
     source.work_file = work_file
+    source.waiting = [""] * settings.list_size
+    source.seen_checks = [0] * settings.seen_size
+    source.seen_counts = [0] * settings.seen_size
+    source.started = time.monotonic()
+
+
+def Scrambled(
+        text: str,
+        start: int
+        ) -> int:
+    result = start
+    for char in text:
+        result = result ^ ord(char)
+        result = (result * HASH_PRIME) & HASH_MASK
+    return result
+
+
+def Place_Of(
+        source: Web_Source,
+        address: str
+        ) -> int:
+    return Scrambled(address, PLACE_START) % source.settings.seen_size
+
+
+def Is_Known(
+        source: Web_Source,
+        address: str
+        ) -> bool:
+    place = Place_Of(source, address)
+    if source.seen_counts[place] == 0:
+        return False
+    return source.seen_checks[place] == Scrambled(address, CHECK_START)
+
+
+def Remember(
+        source: Web_Source,
+        address: str
+        ) -> bool:
+    #-- Gives a new address its place in the seen table. False if the place is
+    #-- taken by another address that still has mentions: then the newcomer only
+    #-- wears the owner down, and is not remembered this time.
+    place = Place_Of(source, address)
+    check = Scrambled(address, CHECK_START)
+    if source.seen_counts[place] > 1:
+        source.seen_counts[place] = source.seen_counts[place] - 1
+        return False
+    source.seen_checks[place] = check
+    source.seen_counts[place] = 1
+    return True
+
+
+def Add_Mention(
+        source: Web_Source,
+        address: str
+        ) -> None:
+    place = Place_Of(source, address)
+    source.seen_counts[place] = source.seen_counts[place] + 1
+
+
+def Mentions_Of(
+        source: Web_Source,
+        address: str
+        ) -> int:
+    if not Is_Known(source, address):
+        return 0
+    return source.seen_counts[Place_Of(source, address)]
+
+
+def Waiting_Count(
+        source: Web_Source
+        ) -> int:
+    return source.count
+
+
+def Put_In_Line(
+        source: Web_Source,
+        address: str
+        ) -> None:
+    place = (source.first + source.count) % source.settings.list_size
+    source.waiting[place] = address
+    source.count = source.count + 1
+
+
+def Taken_From_Line(
+        source: Web_Source
+        ) -> str:
+    address = source.waiting[source.first]
+    source.first = (source.first + 1) % source.settings.list_size
+    source.count = source.count - 1
+    return address
+
+
+def Has_Room(
+        source: Web_Source,
+        kind: str
+        ) -> bool:
+    #-- Is there room in the list where an address of this kind would go?
+    if kind == web_addresses.PAGE:
+        return source.count < source.settings.list_size
+    return len(source.finds[kind]) < source.settings.list_size
 
 
 def Add_Address(
@@ -129,24 +260,31 @@ def Note_Link(
     #-- Files one full address. True if it was new and is now listed for a visit.
     if target == "":
         return False
-    if target in source.mentions:
-        source.mentions[target] = source.mentions[target] + 1
+    if Is_Known(source, target):
+        Add_Mention(source, target)
         return False
-    source.mentions[target] = 1
     kind = web_addresses.Kind_By_Name(target)
+    if not Has_Room(source, kind):
+        source.tally.left_out = source.tally.left_out + 1
+        return False
+        #-- Nothing is remembered about it, so a later link can list it when there is room.
+    if not Remember(source, target):
+        source.tally.left_out = source.tally.left_out + 1
+        return False
     if kind != web_addresses.PAGE:
         source.finds[kind].append(target)
         return False
         #-- First guard: by its name it is not a page, so it is never asked for.
-    source.queue.append(target)
+    Put_In_Line(source, target)
     return True
 
 
-def Mentions_Of(
-        source: Web_Source,
-        address: str
-        ) -> int:
-    return source.mentions.get(address, 0)
+def Out_Of_Time(
+        source: Web_Source
+        ) -> bool:
+    if source.settings.time_limit <= 0.0:
+        return False
+    return time.monotonic() - source.started > source.settings.time_limit
 
 
 def Can_Read_More(
@@ -154,7 +292,9 @@ def Can_Read_More(
         ) -> bool:
     if source.tally.asked >= source.settings.page_limit:
         return False
-    return source.next_in_queue < len(source.queue)
+    if Out_Of_Time(source):
+        return False
+    return source.count > 0
 
 
 def Wait_For_Turn(
@@ -222,7 +362,7 @@ def Would_Be_Listed(
         target: str
         ) -> bool:
     #-- Is it a page never seen before? Those are the ones that lengthen the list.
-    if target == "" or target in source.mentions:
+    if target == "" or Is_Known(source, target):
         return False
     return web_addresses.Kind_By_Name(target) == web_addresses.PAGE
 
@@ -274,8 +414,7 @@ def Read_Page(
 def Read_Next_Page(
         source: Web_Source
         ) -> None:
-    address = source.queue[source.next_in_queue]
-    source.next_in_queue = source.next_in_queue + 1
+    address = Taken_From_Line(source)
     rules = Rules_For(source, web_addresses.Site_Of(address))
     if not robots.Allows(rules, web_addresses.Path_Of(address)):
         source.tally.refused = source.tally.refused + 1
@@ -294,7 +433,8 @@ def Read_Next_Page(
         return
     kind = web_addresses.Kind_By_Label(answer.label)
     if kind != web_addresses.PAGE:
-        source.finds[kind].append(address)
+        if Has_Room(source, kind):
+            source.finds[kind].append(address)
         source.tally.not_text = source.tally.not_text + 1
         return
         #-- Second guard: it looked like a page by name, but the server says otherwise.

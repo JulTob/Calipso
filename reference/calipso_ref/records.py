@@ -15,6 +15,7 @@ Mirror note: Python only uses the file as data.
 
 import math
 import os
+import struct
 
 WORD_LENGTH = 16
 TAPE_MARK = "calipso-tape"
@@ -191,7 +192,7 @@ def Unit_Name_For(
     return name + UNIT_ENDING
 
 
-def Save(
+def Save_As_Text(
         tape: Tape,
         file_name: str
         ) -> None:
@@ -228,6 +229,149 @@ def Save(
     try:
         with open(file_name, "w", encoding="utf-8", newline="\n") as out:
             out.write("\n".join(lines) + "\n")
+    except OSError:
+        raise Record_Error(f"cannot write the file {file_name}")
+
+
+PACKED_MARK = b"ZMB1"
+#-- The four bytes that open every packed brain file.
+PACKED_ENDING = ".zmb"
+TAG_WHOLE = 0
+TAG_REAL = 1
+LARGEST_PACKED_WHOLE = 9007199254740992.0
+#-- 2 to the power 53: up to here every whole number is exact as a real.
+
+
+def Is_Packed_Name(
+        file_name: str
+        ) -> bool:
+    #-- A file name that ends in .zmb asks for the packed form.
+    ending = file_name[-len(PACKED_ENDING):]
+    return ending.lower() == PACKED_ENDING
+
+
+def Put_Whole(
+        out: bytearray,
+        value: int
+        ) -> None:
+    #-- A whole number in as few bytes as it needs: 7 bits in each byte, and
+    #-- the top bit says "there is more".
+    while value >= 128:
+        out.append((value % 128) + 128)
+        value = value // 128
+    out.append(value)
+
+
+def Put_Number(
+        out: bytearray,
+        value: float
+        ) -> None:
+    is_plain_whole = value >= 0.0 and value < LARGEST_PACKED_WHOLE and math.floor(value) == value
+    if is_plain_whole and not (value == 0.0 and math.copysign(1.0, value) < 0.0):
+        out.append(TAG_WHOLE)
+        Put_Whole(out, int(value))
+        return
+    out.append(TAG_REAL)
+    bits = int.from_bytes(struct.pack("<d", value), "little")
+    for _ in range(0, 8):
+        out.append(bits % 256)
+        bits = bits // 256
+    #-- The 8 bytes of the number as the machine keeps it, lowest byte first.
+
+
+def Packed(
+        tape: Tape
+        ) -> bytes:
+    out = bytearray(PACKED_MARK)
+    Put_Whole(out, len(tape.words))
+    for item in tape.words:
+        Put_Whole(out, len(item))
+        out.extend(item.encode("ascii"))
+    Put_Whole(out, len(tape.reals))
+    for value in tape.reals:
+        Put_Number(out, value)
+    return bytes(out)
+
+
+class Unpacking:
+    #-- The bytes of a packed file, and how far they have been read.
+
+    def __init__(
+            self,
+            data: bytes
+            ):
+        self.data = data
+        self.position = 0
+
+
+def Take_Byte(
+        reading: Unpacking
+        ) -> int:
+    if reading.position >= len(reading.data):
+        raise Record_Error("the packed brain file is cut short")
+    reading.position = reading.position + 1
+    return reading.data[reading.position - 1]
+
+
+def Take_Whole(
+        reading: Unpacking
+        ) -> int:
+    value = 0
+    scale = 1
+    while True:
+        byte = Take_Byte(reading)
+        value = value + (byte % 128) * scale
+        if byte < 128:
+            return value
+        scale = scale * 128
+        if scale > LARGEST_PACKED_WHOLE:
+            raise Record_Error("the packed brain file is damaged")
+
+
+def Take_Packed_Number(
+        reading: Unpacking
+        ) -> float:
+    tag = Take_Byte(reading)
+    if tag == TAG_WHOLE:
+        return float(Take_Whole(reading))
+    if tag != TAG_REAL:
+        raise Record_Error("the packed brain file is damaged")
+    bits = 0
+    scale = 1
+    for _ in range(0, 8):
+        bits = bits + Take_Byte(reading) * scale
+        scale = scale * 256
+    return struct.unpack("<d", bits.to_bytes(8, "little"))[0]
+
+
+def Unpacked(
+        data: bytes
+        ) -> Tape:
+    tape = Tape()
+    reading = Unpacking(data)
+    reading.position = len(PACKED_MARK)
+    for _ in range(0, Take_Whole(reading)):
+        length = Take_Whole(reading)
+        letters = ""
+        for _ in range(0, length):
+            letters = letters + chr(Take_Byte(reading))
+        tape.words.append(letters)
+    for _ in range(0, Take_Whole(reading)):
+        tape.reals.append(Take_Packed_Number(reading))
+    return tape
+
+
+def Save(
+        tape: Tape,
+        file_name: str
+        ) -> None:
+    #-- A name ending in .zmb is saved packed; any other name as text that is also Ada.
+    if not Is_Packed_Name(file_name):
+        Save_As_Text(tape, file_name)
+        return
+    try:
+        with open(file_name, "wb") as out:
+            out.write(Packed(tape))
     except OSError:
         raise Record_Error(f"cannot write the file {file_name}")
 
@@ -278,12 +422,20 @@ def Remove_Frame(
 def Load(
         file_name: str
         ) -> Tape:
-    tape = Tape()
+    #-- Reads a brain file, text or packed: the first four bytes say which.
     try:
-        with open(file_name, encoding="utf-8") as source:
-            for line in source:
-                Take_Line(tape, line.rstrip("\n"))
+        with open(file_name, "rb") as source:
+            data = source.read()
     except OSError:
         raise Record_Error(f"cannot open the file {file_name}")
+    if data[:len(PACKED_MARK)] == PACKED_MARK:
+        return Unpacked(data)
+    tape = Tape()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Record_Error("this is not a brain file")
+    for line in text.split("\n"):
+        Take_Line(tape, line)
     Remove_Frame(tape)
     return tape

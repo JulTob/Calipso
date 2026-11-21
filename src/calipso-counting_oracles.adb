@@ -113,6 +113,13 @@ package body Calipso.Counting_Oracles is
         return Fragment_Counts.Capacity_Of (Self.Table);
         end Capacity;
 
+    function Longest_Of (
+            Self : in Counting_Oracle
+            ) return Positive is
+        begin
+        return Self.Longest;
+        end Longest_Of;
+
     procedure Save (
             Self : in     Counting_Oracle;
             Tape : in out Records.Tape

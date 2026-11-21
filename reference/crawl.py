@@ -1,16 +1,21 @@
 """Mirror of apps/calipso_crawl.adb: a brain that studies pages from the web.
 
 Usage:
-   python3 reference/crawl.py BRAIN_FILE START_LIST [PAGES] [RECIPE]
+   python3 reference/crawl.py BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]
 
 START_LIST is a text file with one address per line (lines that start with #
 are notes). The robot starts there and follows the links it finds, staying on
 the same site, obeying each site's robots.txt, and never asking faster than
-once a second. It reads at most PAGES pages (20 if not said).
+once a second.
 
-The brain is loaded from BRAIN_FILE, or made new from RECIPE if the file does
-not exist, and saved back at the end. What was found that is not a page
-(pictures, films, sounds, other text files) is listed in BRAIN_FILE.finds.txt.
+   pages=N    read at most N pages (20 if not said)
+   minutes=N  stop asking for pages after N minutes (no limit if not said)
+   list=N     the size of the waiting list of links (1024 if not said)
+   recipe=R   the neurons of a NEW brain (bias+position if not said)
+
+The brain is loaded from BRAIN_FILE, or made new if the file does not exist,
+and saved as it studies. What was found that is not a page (pictures, films,
+sounds, other text files) is listed in BRAIN_FILE.finds.txt.
 """
 
 import os
@@ -29,6 +34,10 @@ from calipso_ref import web_sources
 
 DEFAULT_PAGES = 20
 DEFAULT_RECIPE = "bias+position"
+DEFAULT_LIST = 1024
+SEEN_PER_PLACE = 64
+#-- The table of seen addresses has this many places for each place in the waiting list.
+SECONDS_IN_A_MINUTE = 60.0
 HIDING_SEED = 1077
 SAVE_EVERY = 50
 #-- The brain is saved after every stretch of this many lessons, so that
@@ -89,6 +98,10 @@ def Show_Tally(
         f"Refused by the site's rules: {tally.refused}. Not text after asking: {tally.not_text}. "
         f"Failed: {tally.failed}."
         )
+    print(
+        f"Links: {web_sources.Waiting_Count(source)} still waiting, {tally.left_out} left out "
+        f"because a list was full (lists of {source.settings.list_size})."
+        )
     line = "Found and filed:"
     for kind in web_addresses.ALL_KINDS:
         if kind != web_addresses.PAGE:
@@ -126,15 +139,27 @@ def Studied_And_Saved(
     return result
 
 
+class Options:
+    #-- What the command line asked for.
+
+    def __init__(self):
+        self.pages = DEFAULT_PAGES
+        self.minutes = 0
+        self.list_size = DEFAULT_LIST
+        self.recipe = DEFAULT_RECIPE
+
+
 def Run_Crawl(
         brain_name: str,
         list_name: str,
-        pages: int,
-        recipe: str
+        options: Options
         ) -> None:
-    brain = Made_Or_Loaded(brain_name, recipe)
+    brain = Made_Or_Loaded(brain_name, options.recipe)
     settings = web_sources.Settings()
-    settings.page_limit = pages
+    settings.page_limit = options.pages
+    settings.list_size = options.list_size
+    settings.seen_size = options.list_size * SEEN_PER_PLACE
+    settings.time_limit = float(options.minutes) * SECONDS_IN_A_MINUTE
     work_file = brain_name + ".page"
     source = web_sources.Web_Source()
     web_sources.Open(source, fetchers.Curl_Fetcher(), brain.letters, settings, work_file)
@@ -154,16 +179,41 @@ def Run_Crawl(
 
 
 def Whole_Number(
-        word: str
+        word: str,
+        least: int
         ) -> int:
-    if not word.isascii() or not word.isdigit():
-        raise Bad_Argument("the number of pages must be a whole number, 0 or greater")
+    if not word.isascii() or not word.isdigit() or len(word) > 9:
+        raise Bad_Argument("a number was expected, found: " + word)
+    if int(word) < least:
+        raise Bad_Argument("the number is too small: " + word)
     return int(word)
+
+
+def Take_Option(
+        options: Options,
+        word: str
+        ) -> None:
+    #-- One option, written name=value.
+    equal = word.find("=")
+    if equal < 0:
+        raise Bad_Argument("options are written name=value, for example pages=50. Found: " + word)
+    name = word[:equal]
+    value = word[equal + 1:]
+    if name == "pages":
+        options.pages = Whole_Number(value, 0)
+    elif name == "minutes":
+        options.minutes = Whole_Number(value, 0)
+    elif name == "list":
+        options.list_size = Whole_Number(value, 1)
+    elif name == "recipe":
+        options.recipe = value
+    else:
+        raise Bad_Argument("there is no option called " + name)
 
 
 def Show_Usage() -> None:
     print("Usage:")
-    print("   calipso_crawl BRAIN_FILE START_LIST [PAGES] [RECIPE]")
+    print("   calipso_crawl BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]")
 
 
 def Main() -> None:
@@ -172,13 +222,10 @@ def Main() -> None:
         Show_Usage()
         sys.exit(1)
     try:
-        pages = DEFAULT_PAGES
-        recipe = DEFAULT_RECIPE
-        if len(arguments) >= 3:
-            pages = Whole_Number(arguments[2])
-        if len(arguments) >= 4:
-            recipe = arguments[3]
-        Run_Crawl(arguments[0], arguments[1], pages, recipe)
+        options = Options()
+        for word in arguments[2:]:
+            Take_Option(options, word)
+        Run_Crawl(arguments[0], arguments[1], options)
     except (texts.Reading_Error, records.Record_Error, neuron_kinds.Recipe_Error, Bad_Argument) as problem:
         print(f"Error: {problem}")
         sys.exit(1)

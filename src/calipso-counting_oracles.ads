@@ -43,6 +43,11 @@ package Calipso.Counting_Oracles is
             Self : in Counting_Oracle
             ) return Natural;
 
+    function Longest_Of (
+            Self : in Counting_Oracle
+            ) return Positive;
+    --# The longest fragment it counts: its window.
+
     procedure Save (
             Self : in     Counting_Oracle;
             Tape : in out Records.Tape

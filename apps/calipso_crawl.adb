@@ -1,16 +1,22 @@
 --  A brain that studies pages from the web.
 --
 --  Usage:
---     calipso_crawl BRAIN_FILE START_LIST [PAGES] [RECIPE]
+--     calipso_crawl BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]
 --
 --  START_LIST is a text file with one address per line (lines that start with #
 --  are notes). The robot starts there and follows the links it finds, staying on
 --  the same site, obeying each site's robots.txt, and never asking faster than
---  once a second. It reads at most PAGES pages (20 if not said).
+--  once a second.
 --
---  The brain is loaded from BRAIN_FILE, or made new from RECIPE if the file does
---  not exist, and saved back at the end. What was found that is not a page
---  (pictures, films, sounds, other text files) is listed in BRAIN_FILE.finds.txt.
+--     pages=N    read at most N pages (20 if not said)
+--     minutes=N  stop asking for pages after N minutes (no limit if not said)
+--     list=N     the size of the waiting list of links (1024 if not said)
+--     recipe=R   the neurons of a NEW brain (bias+position if not said)
+--
+--  The brain is loaded from BRAIN_FILE, or made new if the file does not exist,
+--  and saved as it studies. A name ending in .zmb is kept packed. What was found
+--  that is not a page (pictures, films, sounds, other text files) is listed in
+--  BRAIN_FILE.finds.txt.
 --
 --  It mirrors reference/crawl.py: with the same arguments it writes the same.
 
@@ -42,6 +48,20 @@ procedure Calipso_Crawl is
 
     Default_Pages  : constant Natural := 20;
     Default_Recipe : constant String := "bias+position";
+    Default_List   : constant Positive := 1_024;
+    Seen_Per_Place : constant Positive := 64;
+    --# The table of seen addresses has this many places for each place in the waiting list.
+    Seconds_In_A_Minute : constant Duration := 60.0;
+    Most_Digits    : constant Positive := 9;
+
+    type Choices is record
+        Pages     : Natural := Default_Pages;
+        Minutes   : Natural := 0;
+        List_Size : Positive := Default_List;
+        Recipe    : Ada.Strings.Unbounded.Unbounded_String :=
+            Ada.Strings.Unbounded.To_Unbounded_String (Default_Recipe);
+        end record;
+    --# What the command line asked for.
     Hiding_Seed    : constant Natural := 1_077;
     Save_Every     : constant Positive := 50;
     --# The brain is saved after every stretch of this many lessons, so that
@@ -108,7 +128,8 @@ procedure Calipso_Crawl is
         end Add_Start_List;
 
     procedure Show_Tally (
-            Source : in Web_Sources.Web_Source
+            Source    : in Web_Sources.Web_Source;
+            List_Size : in Positive
             ) is
         use Ada.Strings.Unbounded;
         Counts : constant Web_Sources.Tally := Web_Sources.Tally_Of (Source);
@@ -121,6 +142,11 @@ procedure Calipso_Crawl is
             & "Refused by the site's rules: " & Console.Image (Counts.Refused)
             & ". Not text after asking: " & Console.Image (Counts.Not_Text)
             & ". Failed: " & Console.Image (Counts.Failed) & "."
+            );
+        Console.Put_Line (
+            "Links: " & Console.Image (Web_Sources.Waiting_Count (Source)) & " still waiting, "
+            & Console.Image (Counts.Left_Out) & " left out because a list was full (lists of "
+            & Console.Image (List_Size) & ")."
             );
         for Kind in Web_Addresses.Content_Kind loop
             if Kind /= Web_Addresses.Page then
@@ -178,8 +204,7 @@ procedure Calipso_Crawl is
     procedure Run_Crawl (
             Brain_Name : in String;
             List_Name  : in String;
-            Most_Pages : in Natural;
-            Recipe     : in String
+            Wanted     : in Choices
             ) is
         Brain     : Brains.Brain;
         Options   : Web_Sources.Settings;
@@ -191,14 +216,17 @@ procedure Calipso_Crawl is
         Surprise  : Long_Float;
         Work_File : constant String := Brain_Name & ".page";
         begin
-        Make_Or_Load (Brain, Brain_Name, Recipe);
-        Options.Page_Limit := Most_Pages;
+        Make_Or_Load (Brain, Brain_Name, Ada.Strings.Unbounded.To_String (Wanted.Recipe));
+        Options.Page_Limit := Wanted.Pages;
+        Options.List_Size := Wanted.List_Size;
+        Options.Seen_Size := Wanted.List_Size * Seen_Per_Place;
+        Options.Time_Limit := Wanted.Minutes * Seconds_In_A_Minute;
         Web_Sources.Open (Source, Fetcher, Brains.Letters_Of (Brain), Options, Work_File);
         Add_Start_List (Source, List_Name);
         Dice := Random_Sources.Seeded (Hiding_Seed + Brains.Lessons_Studied (Brain));
         Before := Brains.Lessons_Studied (Brain);
         Study_And_Save (Brain, Brain_Name, Source, Dice, Result);
-        Show_Tally (Source);
+        Show_Tally (Source, Wanted.List_Size);
         Surprise := Blind_Spots.Mean_Surprise (Result);
         Console.Put_Line (
             "Studied " & Console.Image (Brains.Lessons_Studied (Brain) - Before) & " lessons. While studying: right "
@@ -215,38 +243,67 @@ procedure Calipso_Crawl is
         end Run_Crawl;
 
     function Whole_Number (
-            Word : in String
+            Word  : in String;
+            Least : in Natural
             ) return Natural is
+        Value : Natural := 0;
         begin
+        if Word = "" or else Word'Length > Most_Digits then
+            raise Bad_Argument with "a number was expected, found: " & Word;
+            end if;
         for Char of Word loop
             if Char not in '0' .. '9' then
-                raise Bad_Argument with "the number of pages must be a whole number, 0 or greater";
+                raise Bad_Argument with "a number was expected, found: " & Word;
                 end if;
+            Value := Value * 10 + (Character'Pos (Char) - Character'Pos ('0'));
             end loop;
-        return Natural'Value (Word);
-        exception
-        when Constraint_Error =>
-            raise Bad_Argument with "the number of pages must be a whole number, 0 or greater";
+        if Value < Least then
+            raise Bad_Argument with "the number is too small: " & Word;
+            end if;
+        return Value;
         end Whole_Number;
+
+    procedure Take_Option (
+            Wanted : in out Choices;
+            Word   : in     String
+            ) is
+        Equal : constant Natural := Ada.Strings.Fixed.Index (Word, "=");
+        begin
+        if Equal = 0 then
+            raise Bad_Argument with "options are written name=value, for example pages=50. Found: " & Word;
+            end if;
+        declare
+            Name  : constant String := Word (Word'First .. Equal - 1);
+            Value : constant String := Word (Equal + 1 .. Word'Last);
+            begin
+            if Name = "pages" then
+                Wanted.Pages := Whole_Number (Value, 0);
+            elsif Name = "minutes" then
+                Wanted.Minutes := Whole_Number (Value, 0);
+            elsif Name = "list" then
+                Wanted.List_Size := Whole_Number (Value, 1);
+            elsif Name = "recipe" then
+                Wanted.Recipe := Ada.Strings.Unbounded.To_Unbounded_String (Value);
+            else
+                raise Bad_Argument with "there is no option called " & Name;
+                end if;
+            end;
+        end Take_Option;
+    --# One option, written name=value.
 
     procedure Show_Usage is
         begin
         Console.Put_Line ("Usage:");
-        Console.Put_Line ("   calipso_crawl BRAIN_FILE START_LIST [PAGES] [RECIPE]");
+        Console.Put_Line ("   calipso_crawl BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]");
         end Show_Usage;
 
     procedure Crawl_Command is
-        Count : constant Natural := Ada.Command_Line.Argument_Count;
-        Most_Pages : Natural := Default_Pages;
+        Wanted : Choices;
         begin
-        if Count >= 3 then
-            Most_Pages := Whole_Number (Ada.Command_Line.Argument (3));
-            end if;
-        if Count >= 4 then
-            Run_Crawl (Ada.Command_Line.Argument (1), Ada.Command_Line.Argument (2), Most_Pages, Ada.Command_Line.Argument (4));
-        else
-            Run_Crawl (Ada.Command_Line.Argument (1), Ada.Command_Line.Argument (2), Most_Pages, Default_Recipe);
-            end if;
+        for Index in 3 .. Ada.Command_Line.Argument_Count loop
+            Take_Option (Wanted, Ada.Command_Line.Argument (Index));
+            end loop;
+        Run_Crawl (Ada.Command_Line.Argument (1), Ada.Command_Line.Argument (2), Wanted);
         end Crawl_Command;
 
     begin

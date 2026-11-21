@@ -63,6 +63,25 @@ jobs:
           diff cross_ada.txt cross_python.txt
           diff own_ada.txt own_python.txt
 
+      - name: Packed brains (.zmb) - smaller, exact, and read by both languages
+        run: |
+          ./bin/calipso_brain copy brain_ada.brn brain_ada.zmb
+          ./bin/calipso_brain copy mixed_ada.brn mixed_ada.zmb
+          python3 reference/brain.py copy brain_python.brn brain_python.zmb
+          python3 reference/brain.py copy mixed_python.brn mixed_python.zmb
+          ls -l brain_ada.brn brain_ada.zmb mixed_ada.brn mixed_ada.zmb
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.brn mixed_ada.brn | grep hidden > text_form.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.zmb mixed_ada.zmb | grep hidden > packed_form.txt
+          diff text_form.txt packed_form.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_python.zmb mixed_python.zmb brain_ada.zmb mixed_ada.zmb > packed_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_python.zmb mixed_python.zmb brain_ada.zmb mixed_ada.zmb > packed_python.txt
+          cat packed_ada.txt
+          diff packed_ada.txt packed_python.txt
+          ./bin/calipso_brain copy brain_ada.zmb back_ada.brn
+          ./bin/calipso_brain compare data/sample_es.txt back_ada.brn | grep hidden > back_form.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.brn | grep hidden > first_form.txt
+          diff first_form.txt back_form.txt
+
       - name: A saved brain is also Ada - compile one into a program and compare
         run: |
           ./bin/calipso_brain study tests/frozen/frozen.brn data/sample_es.txt 20 counting+bias+position
@@ -80,8 +99,10 @@ jobs:
         run: |
           ./bin/calipso_serve tests/site 8765 > site_server.log 2>&1 &
           sleep 1
-          ./bin/calipso_crawl web_ada.brn tests/start_list.txt 10 > crawl_ada.txt
-          python3 reference/crawl.py web_python.brn tests/start_list.txt 10 > crawl_python.txt
+          ./bin/calipso_crawl web_ada.brn tests/start_list.txt pages=10 > crawl_ada.txt
+          python3 reference/crawl.py web_python.brn tests/start_list.txt pages=10 > crawl_python.txt
+          ./bin/calipso_crawl small_ada.zmb tests/start_list.txt pages=10 list=2 recipe=bias+decay:6:2 > small_ada.txt
+          python3 reference/crawl.py small_python.zmb tests/start_list.txt pages=10 list=2 recipe=bias+decay:6:2 > small_python.txt
           cat crawl_ada.txt
           cat web_ada.brn.finds.txt
           echo "What the site was asked for:"
@@ -89,6 +110,10 @@ jobs:
           sed -e 's/_python/_ada/g' crawl_python.txt > crawl_python_as_ada.txt
           diff crawl_ada.txt crawl_python_as_ada.txt
           diff web_ada.brn.finds.txt web_python.brn.finds.txt
+          echo "With a waiting list of only 2 places:"
+          cat small_ada.txt
+          sed -e 's/_python/_ada/g' small_python.txt > small_python_as_ada.txt
+          diff small_ada.txt small_python_as_ada.txt
 
       - name: The panel - look, check the rules, train, hide and rebuild
         run: |

@@ -129,6 +129,19 @@ def Run_Compare(
         Show_Exam(brain, exam)
 
 
+def Run_Copy(
+        from_name: str,
+        to_name: str
+        ) -> None:
+    #-- Loads a brain and saves it under another name. The ending of the new
+    #-- name decides the form: .zmb is packed, anything else is text that is also Ada.
+    brain = brains.Brain()
+    brains.Load(brain, from_name)
+    brains.Save(brain, to_name)
+    print(f"{from_name}: {brains.Recipe_Of(brain)}, {brain.lessons} lessons")
+    print(f"Copied: {os.path.getsize(from_name)} bytes -> {os.path.getsize(to_name)} bytes in {to_name}")
+
+
 def Whole_Number(
         word: str
         ) -> int:
@@ -145,6 +158,7 @@ def Show_Usage() -> None:
     print("Usage:")
     print("   calipso_brain study BRAIN_FILE CORPUS [LESSONS] [RECIPE]")
     print("   calipso_brain compare CORPUS BRAIN_FILE [BRAIN_FILE ...]")
+    print("   calipso_brain copy FROM_FILE TO_FILE")
 
 
 def Main() -> None:
@@ -160,6 +174,8 @@ def Main() -> None:
             Run_Study(arguments[1], arguments[2], lessons, recipe)
         elif len(arguments) >= 3 and arguments[0] == "compare":
             Run_Compare(arguments[1], arguments[2:])
+        elif len(arguments) == 3 and arguments[0] == "copy":
+            Run_Copy(arguments[1], arguments[2])
         else:
             Show_Usage()
             sys.exit(1)

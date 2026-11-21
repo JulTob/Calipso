@@ -78,6 +78,16 @@ package Calipso.Neurons is
             ) return Boolean;
     --# Is there a neighbour with a letter at that distance? (A cell never votes for itself.)
 
+    function With_Sizes (
+            Word         : in String;
+            First        : in Natural;
+            Usual_First  : in Natural;
+            Second       : in Natural;
+            Usual_Second : in Natural
+            ) return String;
+    --# The name of a neuron as a recipe writes it: the word alone when its
+    --# sizes are the usual ones, and "word:first" or "word:first:second" when not.
+
     function Same (
             Left  : in Neuron'Class;
             Right : in Neuron'Class

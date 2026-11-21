@@ -15,6 +15,21 @@
 --
 --  The file is written by Calipso in a fixed layout, one item per line, so
 --  that reading it as data needs no knowledge of Ada.
+--
+--  A tape can also be kept PACKED, in a ".zmb" file: the same words and numbers
+--  as raw bytes instead of written-out text. It is several times smaller and
+--  nothing is lost, but it cannot be read by eye or compiled. Use .brn to read
+--  and to compile; use .zmb to store and to send.
+--
+--     4 bytes       the letters Z M B 1
+--     whole number  how many words; then each word: its length, its letters
+--     whole number  how many numbers; then each number:
+--                      byte 0, then a whole number         (a count)
+--                      byte 1, then the 8 bytes of a real  (anything else)
+--
+--  A whole number takes as few bytes as it needs: 7 bits in each byte, lowest
+--  first, and the top bit of a byte says "there is more". The 8 bytes of a real
+--  are the number as the machine keeps it (IEEE 754), lowest byte first.
 
 with Ada.Containers.Indefinite_Vectors;
 
@@ -87,13 +102,21 @@ package Calipso.Records is
             Self      : in Tape;
             File_Name : in String
             );
-    --# Writes the tape as a brain file. Raises Record_Error if it cannot be written.
+    --# Writes the tape as a brain file: packed if the name ends in .zmb, and as
+    --# text that is also Ada for any other name.
+    --# Raises Record_Error if it cannot be written.
 
     procedure Load (
             Self      :    out Tape;
             File_Name : in     String
             );
-    --# Reads a brain file as data. Raises Record_Error if it is missing or damaged.
+    --# Reads a brain file as data, text or packed: its first four bytes say which.
+    --# Raises Record_Error if it is missing or damaged.
+
+    function Is_Packed_Name (
+            File_Name : in String
+            ) return Boolean;
+    --# Does the name end in .zmb?
 
     procedure Fill (
             Self         :    out Tape;

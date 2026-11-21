@@ -83,3 +83,19 @@ class Neuron:
             source
             ) -> None:
         raise NotImplementedError
+
+
+def With_Sizes(
+        word: str,
+        first: int,
+        usual_first: int,
+        second: int,
+        usual_second: int
+        ) -> str:
+    #-- The name of a neuron as a recipe writes it: the word alone when its
+    #-- sizes are the usual ones, and "word:first" or "word:first:second" when not.
+    if second != usual_second:
+        return f"{word}:{first}:{second}"
+    if first != usual_first:
+        return f"{word}:{first}"
+    return word

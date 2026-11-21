@@ -15,12 +15,25 @@
 --  Nothing is fetched twice. An address that is linked again is not listed
 --  again; it only gets one more "mention", a count of how many links point to it.
 --
+--  Everything has a fixed size, chosen in the settings, so that a long walk
+--  never needs more memory than a short one:
+--
+--     the waiting list : the addresses still to visit. When it is full, new
+--                        links are left out until there is room again.
+--     the seen table   : which addresses are already known, and their mentions.
+--                        It works like the bounded memory of the brain: each
+--                        address has one place, with a check number saying
+--                        whose it is, and a newcomer wears the owner down
+--                        before taking the place. An address forgotten this
+--                        way may be read again.
+--
 --  What is not a page is not thrown away: its address is filed under its kind
 --  (writing, picture, video, sound...), ready for the brain of that kind.
 
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Containers.Indefinite_Holders;
 with Ada.Containers.Indefinite_Vectors;
+with Ada.Containers.Vectors;
 with Ada.Real_Time;
 with Ada.Strings.Hash;
 with Ada.Strings.Unbounded;
@@ -44,6 +57,13 @@ package Calipso.Web_Sources is
         --# The least time between two requests.
         Same_Site_Only : Boolean := True;
         --# Follow only links that stay on the site of the page they are in.
+        List_Size      : Positive := 1_024;
+        --# The most addresses that wait for a visit at once. Also the most
+        --# addresses filed under each kind of thing that is not a page.
+        Seen_Size      : Positive := 65_536;
+        --# How many addresses it can remember having seen.
+        Time_Limit     : Duration := 0.0;
+        --# After this long, no new page is asked for. 0 = no limit.
         end record;
 
     type Tally is record
@@ -57,6 +77,8 @@ package Calipso.Web_Sources is
         Not_Text : Natural := 0;
         --# Asked for, but what arrived was not a page.
         Failed   : Natural := 0;
+        Left_Out : Natural := 0;
+        --# Links not kept because a list was full or their place was taken.
         end record;
     --# What happened, in numbers.
 
@@ -86,6 +108,11 @@ package Calipso.Web_Sources is
     function Tally_Of (
             Self : in Web_Source
             ) return Tally;
+
+    function Waiting_Count (
+            Self : in Web_Source
+            ) return Natural;
+    --# How many addresses are waiting for a visit.
 
     function Find_Count (
             Self : in Web_Source;
@@ -119,12 +146,23 @@ private
             Element_Type => String
             );
 
-    package Mention_Maps is new Ada.Containers.Indefinite_Hashed_Maps (
-            Key_Type        => String,
-            Element_Type    => Natural,
-            Hash            => Ada.Strings.Hash,
-            Equivalent_Keys => "="
+    package Waiting_Lists is new Ada.Containers.Vectors (
+            Index_Type   => Natural,
+            Element_Type => Ada.Strings.Unbounded.Unbounded_String,
+            "="          => Ada.Strings.Unbounded."="
             );
+
+    package Check_Lists is new Ada.Containers.Vectors (
+            Index_Type   => Natural,
+            Element_Type => Ada.Containers.Hash_Type,
+            "="          => Ada.Containers."="
+            );
+
+    package Count_Lists is new Ada.Containers.Vectors (
+            Index_Type   => Natural,
+            Element_Type => Natural
+            );
+    --# These three count their places from 0, so that "next place" is a remainder.
 
     package Rule_Maps is new Ada.Containers.Indefinite_Hashed_Maps (
             Key_Type        => String,
@@ -141,11 +179,16 @@ private
         Letters       : Alphabets.Alphabet;
         Options       : Settings;
         Work_File     : Ada.Strings.Unbounded.Unbounded_String;
-        Queue         : Address_Lists.Vector;
-        --# Every address listed for a visit, in order.
-        Next_In_Queue : Positive := 1;
-        Mentions      : Mention_Maps.Map;
-        --# address -> how many times it has been pointed to. Also: "have I seen it?"
+        Waiting       : Waiting_Lists.Vector;
+        --# The waiting list: a ring of List_Size places.
+        First         : Natural := 0;
+        --# The place of the address that has waited longest.
+        Count         : Natural := 0;
+        --# How many addresses are waiting.
+        Seen_Checks   : Check_Lists.Vector;
+        Seen_Counts   : Count_Lists.Vector;
+        --# The seen table: for each place, whose it is and how many mentions it has.
+        Started       : Ada.Real_Time.Time := Ada.Real_Time.Time_First;
         Finds         : Find_Lists;
         --# kind -> addresses of that kind that were found.
         Rules_By_Site : Rule_Maps.Map;

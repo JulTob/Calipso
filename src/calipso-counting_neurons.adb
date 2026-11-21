@@ -17,12 +17,15 @@ package body Calipso.Counting_Neurons is
     overriding function Name (
             Self : in Counting_Neuron
             ) return String is
+        Longest  : constant Positive := Counting_Oracles.Longest_Of (Self.Oracle);
+        Usual    : constant Positive := Counting_Oracles.Default_Longest;
+        Capacity : constant Natural := Counting_Oracles.Capacity (Self.Oracle);
         begin
-        if Counting_Oracles.Capacity (Self.Oracle) > 0 then
-            return "memory";
+        if Capacity > 0 then
+            return Neurons.With_Sizes ("memory", Capacity, Default_Memory, Longest, Usual);
             --# The same neuron with bounded memory goes by another name in recipes.
             end if;
-        return "counting";
+        return Neurons.With_Sizes ("counting", Longest, Usual, 0, 0);
         end Name;
 
     overriding function Kind (

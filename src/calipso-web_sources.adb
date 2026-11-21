@@ -6,12 +6,19 @@ with Calipso.Pages;
 package body Calipso.Web_Sources is
 
     use Ada.Strings.Unbounded;
+    use type Ada.Containers.Hash_Type;
     use type Ada.Real_Time.Time;
     use type Fetchers.Outcome_Kind;
     use type Pages.Block_Kind;
     use type Web_Addresses.Content_Kind;
 
     Robots_Path : constant String := "/robots.txt";
+
+    Hash_Prime  : constant Ada.Containers.Hash_Type := 16_777_619;
+    Place_Start : constant Ada.Containers.Hash_Type := 2_166_136_261;
+    Check_Start : constant Ada.Containers.Hash_Type := 3_141_592_653;
+    --# The same scrambling recipe as the count table of the brain (FNV-1a), from
+    --# two starting numbers: one gives the place of an address, the other its check number.
 
     procedure Open (
             Self      : in out Web_Source;
@@ -20,14 +27,18 @@ package body Calipso.Web_Sources is
             Options   : in     Settings;
             Work_File : in     String
             ) is
+        List_Size : constant Ada.Containers.Count_Type := Ada.Containers.Count_Type (Options.List_Size);
+        Seen_Size : constant Ada.Containers.Count_Type := Ada.Containers.Count_Type (Options.Seen_Size);
         begin
         Self.Fetcher.Replace_Element (Using);
         Self.Letters := Letters;
         Self.Options := Options;
         Self.Work_File := To_Unbounded_String (Work_File);
-        Self.Queue.Clear;
-        Self.Next_In_Queue := 1;
-        Self.Mentions.Clear;
+        Self.Waiting := Waiting_Lists.To_Vector (Null_Unbounded_String, List_Size);
+        Self.First := 0;
+        Self.Count := 0;
+        Self.Seen_Checks := Check_Lists.To_Vector (0, Seen_Size);
+        Self.Seen_Counts := Count_Lists.To_Vector (0, Seen_Size);
         for Kind in Web_Addresses.Content_Kind loop
             Self.Finds (Kind).Clear;
             end loop;
@@ -35,8 +46,125 @@ package body Calipso.Web_Sources is
         Self.Buffer.Clear;
         Self.Counts := (others => <>);
         Self.Has_Asked := False;
+        Self.Started := Ada.Real_Time.Clock;
         end Open;
     --# Starts from blank: an empty list, nothing seen, nothing counted.
+
+    function Scrambled (
+            Text  : in String;
+            Start : in Ada.Containers.Hash_Type
+            ) return Ada.Containers.Hash_Type is
+        Result : Ada.Containers.Hash_Type := Start;
+        begin
+        for Char of Text loop
+            Result := Result xor Ada.Containers.Hash_Type (Character'Pos (Char));
+            Result := Result * Hash_Prime;
+            end loop;
+        return Result;
+        end Scrambled;
+
+    function Place_Of (
+            Self    : in Web_Source;
+            Address : in String
+            ) return Natural is
+        Size : constant Ada.Containers.Hash_Type := Ada.Containers.Hash_Type (Self.Options.Seen_Size);
+        begin
+        return Natural (Scrambled (Address, Place_Start) mod Size);
+        end Place_Of;
+    --# The one place of the seen table where this address may live.
+
+    function Is_Known (
+            Self    : in Web_Source;
+            Address : in String
+            ) return Boolean is
+        Place : constant Natural := Place_Of (Self, Address);
+        begin
+        if Self.Seen_Counts.Element (Place) = 0 then
+            return False;
+            end if;
+        return Self.Seen_Checks.Element (Place) = Scrambled (Address, Check_Start);
+        end Is_Known;
+
+    procedure Remember (
+            Self    : in out Web_Source;
+            Address : in     String;
+            Kept    :    out Boolean
+            ) is
+        Place : constant Natural := Place_Of (Self, Address);
+        Count : constant Natural := Self.Seen_Counts.Element (Place);
+        begin
+        if Count > 1 then
+            Self.Seen_Counts.Replace_Element (Place, Count - 1);
+            Kept := False;
+            return;
+            end if;
+        Self.Seen_Checks.Replace_Element (Place, Scrambled (Address, Check_Start));
+        Self.Seen_Counts.Replace_Element (Place, 1);
+        Kept := True;
+        end Remember;
+    --# Gives a new address its place in the seen table. Kept is False if the
+    --# place is taken by another address that still has mentions: then the
+    --# newcomer only wears the owner down, and is not remembered this time.
+
+    procedure Add_Mention (
+            Self    : in out Web_Source;
+            Address : in     String
+            ) is
+        Place : constant Natural := Place_Of (Self, Address);
+        begin
+        Self.Seen_Counts.Replace_Element (Place, Self.Seen_Counts.Element (Place) + 1);
+        end Add_Mention;
+
+    function Mentions_Of (
+            Self    : in Web_Source;
+            Address : in String
+            ) return Natural is
+        begin
+        if not Is_Known (Self, Address) then
+            return 0;
+            end if;
+        return Self.Seen_Counts.Element (Place_Of (Self, Address));
+        end Mentions_Of;
+
+    function Waiting_Count (
+            Self : in Web_Source
+            ) return Natural is
+        begin
+        return Self.Count;
+        end Waiting_Count;
+
+    procedure Put_In_Line (
+            Self    : in out Web_Source;
+            Address : in     String
+            ) is
+        Place : constant Natural := (Self.First + Self.Count) mod Self.Options.List_Size;
+        begin
+        Self.Waiting.Replace_Element (Place, To_Unbounded_String (Address));
+        Self.Count := Self.Count + 1;
+        end Put_In_Line;
+
+    procedure Take_From_Line (
+            Self    : in out Web_Source;
+            Address :    out Unbounded_String
+            ) is
+        begin
+        Address := Self.Waiting.Element (Self.First);
+        Self.First := (Self.First + 1) mod Self.Options.List_Size;
+        Self.Count := Self.Count - 1;
+        end Take_From_Line;
+    --# Takes the address that has waited longest.
+
+    function Has_Room (
+            Self : in Web_Source;
+            Kind : in Web_Addresses.Content_Kind
+            ) return Boolean is
+        begin
+        if Kind = Web_Addresses.Page then
+            return Self.Count < Self.Options.List_Size;
+            end if;
+        return Natural (Self.Finds (Kind).Length) < Self.Options.List_Size;
+        end Has_Room;
+    --# Is there room in the list where an address of this kind would go?
 
     procedure Note_Link (
             Self       : in out Web_Source;
@@ -44,23 +172,33 @@ package body Calipso.Web_Sources is
             Was_Listed :    out Boolean
             ) is
         Kind : Web_Addresses.Content_Kind;
+        Kept : Boolean;
         begin
         Was_Listed := False;
         if Target = "" then
             return;
             end if;
-        if Self.Mentions.Contains (Target) then
-            Self.Mentions.Replace (Target, Self.Mentions.Element (Target) + 1);
+        if Is_Known (Self, Target) then
+            Add_Mention (Self, Target);
             return;
             end if;
-        Self.Mentions.Insert (Target, 1);
         Kind := Web_Addresses.Kind_By_Name (Target);
+        if not Has_Room (Self, Kind) then
+            Self.Counts.Left_Out := Self.Counts.Left_Out + 1;
+            return;
+            --# Nothing is remembered about it, so a later link can list it when there is room.
+            end if;
+        Remember (Self, Target, Kept);
+        if not Kept then
+            Self.Counts.Left_Out := Self.Counts.Left_Out + 1;
+            return;
+            end if;
         if Kind /= Web_Addresses.Page then
             Self.Finds (Kind).Append (Target);
             return;
             --# First guard: by its name it is not a page, so it is never asked for.
             end if;
-        Self.Queue.Append (Target);
+        Put_In_Line (Self, Target);
         Was_Listed := True;
         end Note_Link;
     --# Files one full address. Was_Listed: it was new and is now listed for a visit.
@@ -73,17 +211,6 @@ package body Calipso.Web_Sources is
         begin
         Note_Link (Self, Web_Addresses.Resolved (Address, Address), Unused);
         end Add_Address;
-
-    function Mentions_Of (
-            Self    : in Web_Source;
-            Address : in String
-            ) return Natural is
-        begin
-        if not Self.Mentions.Contains (Address) then
-            return 0;
-            end if;
-        return Self.Mentions.Element (Address);
-        end Mentions_Of;
 
     function Tally_Of (
             Self : in Web_Source
@@ -109,6 +236,16 @@ package body Calipso.Web_Sources is
         return Self.Finds (Kind).Element (Index);
         end Find;
 
+    function Out_Of_Time (
+            Self : in Web_Source
+            ) return Boolean is
+        begin
+        if Self.Options.Time_Limit <= 0.0 then
+            return False;
+            end if;
+        return Ada.Real_Time.To_Duration (Ada.Real_Time.Clock - Self.Started) > Self.Options.Time_Limit;
+        end Out_Of_Time;
+
     function Can_Read_More (
             Self : in Web_Source
             ) return Boolean is
@@ -116,7 +253,10 @@ package body Calipso.Web_Sources is
         if Self.Counts.Asked >= Self.Options.Page_Limit then
             return False;
             end if;
-        return Self.Next_In_Queue <= Natural (Self.Queue.Length);
+        if Out_Of_Time (Self) then
+            return False;
+            end if;
+        return Self.Count > 0;
         end Can_Read_More;
 
     procedure Wait_For_Turn (
@@ -216,7 +356,7 @@ package body Calipso.Web_Sources is
             Target : in String
             ) return Boolean is
         begin
-        if Target = "" or else Self.Mentions.Contains (Target) then
+        if Target = "" or else Is_Known (Self, Target) then
             return False;
             end if;
         return Web_Addresses.Kind_By_Name (Target) = Web_Addresses.Page;
@@ -299,15 +439,14 @@ package body Calipso.Web_Sources is
         end Follow_Move;
     --# The page has moved: its new address is treated like any other link.
 
-    procedure Read_Next_Page (
-            Self : in out Web_Source
+    procedure Visit (
+            Self    : in out Web_Source;
+            Address : in     String
             ) is
-        Address : constant String := Self.Queue.Element (Self.Next_In_Queue);
-        Rules   : Robots.Rule_Set;
-        Answer  : Fetchers.Answer;
-        Kind    : Web_Addresses.Content_Kind;
+        Rules  : Robots.Rule_Set;
+        Answer : Fetchers.Answer;
+        Kind   : Web_Addresses.Content_Kind;
         begin
-        Self.Next_In_Queue := Self.Next_In_Queue + 1;
         Find_Rules (Self, Web_Addresses.Site_Of (Address), Rules);
         if not Robots.Allows (Rules, Web_Addresses.Path_Of (Address)) then
             Self.Counts.Refused := Self.Counts.Refused + 1;
@@ -326,12 +465,24 @@ package body Calipso.Web_Sources is
             end if;
         Kind := Web_Addresses.Kind_By_Label (To_String (Answer.Label));
         if Kind /= Web_Addresses.Page then
-            Self.Finds (Kind).Append (Address);
+            if Has_Room (Self, Kind) then
+                Self.Finds (Kind).Append (Address);
+                end if;
             Self.Counts.Not_Text := Self.Counts.Not_Text + 1;
             return;
             --# Second guard: it looked like a page by name, but the server says otherwise.
             end if;
         Read_Page (Self, Address);
+        end Visit;
+    --# One address: check the rules, wait, fetch, check what arrived, read.
+
+    procedure Read_Next_Page (
+            Self : in out Web_Source
+            ) is
+        Address : Unbounded_String;
+        begin
+        Take_From_Line (Self, Address);
+        Visit (Self, To_String (Address));
         end Read_Next_Page;
 
     overriding procedure Next_Piece (

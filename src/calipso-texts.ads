@@ -4,6 +4,7 @@
 --  inside, it is symbols. This is the only place where a file is opened.
 
 with Ada.Containers.Vectors;
+with Ada.Strings.Unbounded;
 with Ada.Strings.Wide_Wide_Unbounded;
 
 with Calipso.Alphabets;
@@ -39,6 +40,12 @@ package Calipso.Texts is
             Letters   : in Alphabets.Alphabet
             ) return Symbol_Text;
     --# Second pass: translate every letter into its symbol.
+
+    function Bytes_Of (
+            File_Name : in String
+            ) return Ada.Strings.Unbounded.Unbounded_String;
+    --# The bytes of a file, whatever they are, one character per byte.
+    --# Raises Reading_Error if the file cannot be read.
 
     subtype Wide_Text is Ada.Strings.Wide_Wide_Unbounded.Unbounded_Wide_Wide_String;
     --# Text as letters, of any length. It lives on the heap, so it can be large.

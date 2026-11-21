@@ -42,6 +42,8 @@ CORPUS_TEXT = (
 TEST_LONGEST = 5
 SAVED_BRAIN = "brain_test_saved.brn"
 SAVED_TAPE = "tape_test_saved.brn"
+PACKED_TAPE = "tape_test_saved.zmb"
+PACKED_BRAIN = "tests/data/brain_from_python.zmb"
 PYTHON_BRAIN = "tests/data/brain_from_python.brn"
 SAMPLE_FILE = "data/sample_es.txt"
 TEST_SITE = "http://test.site"
@@ -356,13 +358,14 @@ def Build_Mixed_Brain(
     return brain
 
 
-def Unknown_Recipe_Is_Refused(
-        fixture: Fixture
+def Recipe_Is_Refused(
+        fixture: Fixture,
+        recipe: str
         ) -> bool:
     brain = brains.Brain()
     brains.Prepare(brain, fixture.letters)
     try:
-        brains.Add_Recipe(brain, "bias+nonsense")
+        brains.Add_Recipe(brain, recipe)
     except neuron_kinds.Recipe_Error:
         return True
     return False
@@ -394,7 +397,7 @@ def Test_Brains(
     Check(fixture, "studying 60 lessons tests 648 letters and gets 237 right", result.hidden == 648 and result.hits == 237)
     Check_Close(fixture, "studying 60 lessons: mean surprise", blind_spots.Mean_Surprise(result), 1.994014327824858)
     Check_Close(fixture, "after studying: P(a)", Opinion_On_A(fixture, brain), 0.1852612847565514)
-    Check(fixture, "the brain knows its recipe", brains.Recipe_Of(brain) == "bias+position")
+    Check(fixture, "the brain knows its recipe", brains.Recipe_Of(brain) == "bias+position:3")
     Check(fixture, "the brain counts its lessons", brain.lessons == 60)
     Check(fixture, "the reach of a brain is that of its widest neuron", brain.Reach() == 3)
 
@@ -403,12 +406,25 @@ def Test_Brains(
     brains.Load(restored, SAVED_BRAIN)
     os.remove(SAVED_BRAIN)
     Check_Close(fixture, "saved and loaded: the same opinion", Opinion_On_A(fixture, restored), Opinion_On_A(fixture, brain))
-    Check(fixture, "saved and loaded: the same recipe and lessons", brains.Recipe_Of(restored) == "bias+position" and restored.lessons == 60)
+    Check(fixture, "saved and loaded: the same recipe and lessons", brains.Recipe_Of(restored) == "bias+position:3" and restored.lessons == 60)
 
     foreign = brains.Brain()
     brains.Load(foreign, PYTHON_BRAIN)
     Check_Close(fixture, "a brain saved by Python: P(a)", Opinion_On_A(fixture, foreign), 0.1852612847565514)
-    Check(fixture, "a brain saved by Python: recipe and lessons", brains.Recipe_Of(foreign) == "bias+position" and foreign.lessons == 60)
+    Check(fixture, "a brain saved by Python: recipe and lessons", brains.Recipe_Of(foreign) == "bias+position:3" and foreign.lessons == 60)
+
+    unpacked = brains.Brain()
+    brains.Load(unpacked, PACKED_BRAIN)
+    Check_Close(fixture, "a packed brain saved by Python: P(a)", Opinion_On_A(fixture, unpacked), 0.1852612847565514)
+
+    sized = brains.Brain()
+    brains.Prepare(sized, fixture.letters)
+    brains.Add_Recipe(sized, "bias+position:5+decay:6:2+memory:4096:5")
+    Check(fixture, "a recipe can give sizes, and the brain says them back", brains.Recipe_Of(sized) == "bias+position:5+decay:6:2+memory:4096:5")
+    Check(fixture, "the usual sizes are not written", neuron_kinds.Made("harmonic:12:4", alphabets.Size(fixture.letters)).Name() == "harmonic")
+    Check(fixture, "the reach of a sized brain", sized.Reach() == 6)
+    Check(fixture, "a size of 0 is refused", Recipe_Is_Refused(fixture, "position:0"))
+    Check(fixture, "a size where none belongs is refused", Recipe_Is_Refused(fixture, "bias:3"))
 
     mixed = brains.Brain()
     brains.Prepare(mixed, fixture.letters)
@@ -428,7 +444,7 @@ def Test_Brains(
     teacher = counting_oracles.Counting_Oracle()
     counting_oracles.Train(teacher, fixture.corpus, alphabets.Size(fixture.letters))
     Check_Close(fixture, "a brain with only the counting neuron says what the counting oracle says", Opinion_On_A(fixture, counter), Opinion_On_A(fixture, teacher))
-    Check(fixture, "a recipe with an unknown name is refused", Unknown_Recipe_Is_Refused(fixture))
+    Check(fixture, "a recipe with an unknown name is refused", Recipe_Is_Refused(fixture, "bias+nonsense"))
 
 
 def Test_Criteria(
@@ -507,6 +523,13 @@ def Test_Records(
     Check(fixture, "a real number comes back exactly", records.Read_Real(back) == -0.125)
     row = records.Read_Reals(back)
     Check(fixture, "a sparse row comes back with its zeros", len(row) == 4 and row[0] == 0.0 and row[1] == 2.5 and row[3] == -1.0)
+    records.Save(tape, PACKED_TAPE)
+    packed = records.Load(PACKED_TAPE)
+    packed_size = os.path.getsize(PACKED_TAPE)
+    os.remove(PACKED_TAPE)
+    Check(fixture, "the packed form keeps the same word", records.Read_Word(packed) == "first")
+    Check(fixture, "the packed form keeps the same numbers", packed.reals == tape.reals)
+    Check(fixture, "the packed form of this tape takes 50 bytes", packed_size == 50)
     Check(fixture, "the package name of a brain file", records.Unit_Name_For("brains/page.brn") == "Page_Brain")
     Check(fixture, "marks in the file name become underlines", records.Unit_Name_For("my-page.2.brn") == "My_Page_2_Brain")
 
@@ -629,6 +652,20 @@ def Test_Web_Sources(
           and len(source.finds[web_addresses.VIDEO]) == 1 and len(source.finds[web_addresses.SOUND]) == 1)
     Check(fixture, "a page linked again is not listed again: it gets mentions", web_sources.Mentions_Of(source, TEST_SITE + "/index.html") == 4)
     Check(fixture, "the other site was never listed", web_sources.Mentions_Of(source, "http://elsewhere.example/") == 0)
+
+    settings = web_sources.Settings()
+    settings.pause_seconds = 0.0
+    settings.list_size = 2
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/index.html")
+    while True:
+        piece, found = source.Next_Piece()
+        if not found:
+            break
+    os.remove(PAGE_WORK_FILE)
+    tally = source.tally
+    Check(fixture, "a waiting list of 2: the 4 pages are still read", tally.asked == 4 and tally.read == 4)
+    Check(fixture, "a waiting list of 2: 3 links are left out", tally.left_out == 3 and web_sources.Waiting_Count(source) == 0)
 
 
 def Main() -> None:

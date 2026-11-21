@@ -64,6 +64,8 @@ procedure Calipso_Tests is
     Test_Longest : constant Positive := 5;
     Saved_Brain  : constant String := "brain_test_saved.brn";
     Saved_Tape   : constant String := "tape_test_saved.brn";
+    Packed_Tape  : constant String := "tape_test_saved.zmb";
+    Packed_Brain : constant String := "tests/data/brain_from_python.zmb";
     Python_Brain : constant String := "tests/data/brain_from_python.brn";
     Sample_File  : constant String := "data/sample_es.txt";
     Test_Site    : constant String := "http://test.site";
@@ -447,16 +449,18 @@ procedure Calipso_Tests is
         Study_From_Corpus (Pupil, 30, Unused);
         end Build_Mixed_Brain;
 
-    function Unknown_Recipe_Is_Refused return Boolean is
+    function Recipe_Is_Refused (
+            Recipe : in String
+            ) return Boolean is
         Pupil : Brains.Brain;
         begin
         Brains.Prepare (Pupil, Letters);
-        Brains.Add_Recipe (Pupil, "bias+nonsense");
+        Brains.Add_Recipe (Pupil, Recipe);
         return False;
         exception
         when Neuron_Kinds.Recipe_Error =>
             return True;
-        end Unknown_Recipe_Is_Refused;
+        end Recipe_Is_Refused;
 
     function Opinion_On_A (
             Model : in Oracles.Oracle'Class
@@ -475,6 +479,9 @@ procedure Calipso_Tests is
         Restored : Brains.Brain;
         Foreign  : Brains.Brain;
         Mixed    : Brains.Brain;
+        Unpacked : Brains.Brain;
+        Sized    : Brains.Brain;
+        Usual_Waves : constant Neurons.Neuron'Class := Neuron_Kinds.Made ("harmonic:12:4", Alphabets.Size (Letters));
         Counter  : Brains.Brain;
         Lone     : Counting_Neurons.Counting_Neuron;
         Teacher  : Counting_Oracles.Counting_Oracle;
@@ -490,7 +497,7 @@ procedure Calipso_Tests is
         Check ("studying 60 lessons tests 648 letters and gets 237 right", Result.Hidden = 648 and then Result.Hits = 237);
         Check_Close ("studying 60 lessons: mean surprise", Blind_Spots.Mean_Surprise (Result), 1.994014327824858);
         Check_Close ("after studying: P(a)", Opinion_On_A (Pupil), 0.1852612847565514);
-        Check ("the brain knows its recipe", Brains.Recipe_Of (Pupil) = "bias+position");
+        Check ("the brain knows its recipe", Brains.Recipe_Of (Pupil) = "bias+position:3");
         Check ("the brain counts its lessons", Brains.Lessons_Studied (Pupil) = 60);
         Check ("the reach of a brain is that of its widest neuron", Pupil.Reach = 3);
 
@@ -500,15 +507,29 @@ procedure Calipso_Tests is
         Check_Close ("saved and loaded: the same opinion", Opinion_On_A (Restored), Opinion_On_A (Pupil));
         Check (
             "saved and loaded: the same recipe and lessons",
-            Brains.Recipe_Of (Restored) = "bias+position" and then Brains.Lessons_Studied (Restored) = 60
+            Brains.Recipe_Of (Restored) = "bias+position:3" and then Brains.Lessons_Studied (Restored) = 60
             );
 
         Brains.Load (Foreign, Python_Brain);
         Check_Close ("a brain saved by Python: P(a)", Opinion_On_A (Foreign), 0.1852612847565514);
         Check (
             "a brain saved by Python: recipe and lessons",
-            Brains.Recipe_Of (Foreign) = "bias+position" and then Brains.Lessons_Studied (Foreign) = 60
+            Brains.Recipe_Of (Foreign) = "bias+position:3" and then Brains.Lessons_Studied (Foreign) = 60
             );
+
+        Brains.Load (Unpacked, Packed_Brain);
+        Check_Close ("a packed brain saved by Python: P(a)", Opinion_On_A (Unpacked), 0.1852612847565514);
+
+        Brains.Prepare (Sized, Letters);
+        Brains.Add_Recipe (Sized, "bias+position:5+decay:6:2+memory:4096:5");
+        Check (
+            "a recipe can give sizes, and the brain says them back",
+            Brains.Recipe_Of (Sized) = "bias+position:5+decay:6:2+memory:4096:5"
+            );
+        Check ("the usual sizes are not written", Usual_Waves.Name = "harmonic");
+        Check ("the reach of a sized brain", Sized.Reach = 6);
+        Check ("a size of 0 is refused", Recipe_Is_Refused ("position:0"));
+        Check ("a size where none belongs is refused", Recipe_Is_Refused ("bias:3"));
 
         Brains.Prepare (Mixed, Letters);
         Brains.Add_Recipe (Mixed, "bias+presence+harmonic+decay+counting");
@@ -528,7 +549,7 @@ procedure Calipso_Tests is
             Opinion_On_A (Counter),
             Opinion_On_A (Teacher)
             );
-        Check ("a recipe with an unknown name is refused", Unknown_Recipe_Is_Refused);
+        Check ("a recipe with an unknown name is refused", Recipe_Is_Refused ("bias+nonsense"));
         end Test_Brains;
 
     procedure Test_Criteria is
@@ -610,6 +631,8 @@ procedure Calipso_Tests is
     procedure Test_Records is
         Tape  : Records.Tape;
         Back  : Records.Tape;
+        Packed : Records.Tape;
+        Packed_Size : Natural;
         Row   : Numbers.Real_Row := Numbers.Zeros (4);
         Count : Natural;
         Real  : Long_Float;
@@ -634,6 +657,20 @@ procedure Calipso_Tests is
             Natural (Row.Length) = 4 and then Row.Element (1) = 0.0
             and then Row.Element (2) = 2.5 and then Row.Element (4) = -1.0
             );
+        Records.Save (Tape, Packed_Tape);
+        Records.Load (Packed, Packed_Tape);
+        Packed_Size := Natural (Ada.Directories.Size (Packed_Tape));
+        Ada.Directories.Delete_File (Packed_Tape);
+        Check ("the packed form keeps the same word", Records.Read_Word (Packed) = "first");
+        Count := Records.Read_Count (Packed);
+        Real := Records.Read_Real (Packed);
+        Row := Records.Read_Reals (Packed);
+        Check (
+            "the packed form keeps the same numbers",
+            Count = 144 and then Real = -0.125 and then Natural (Row.Length) = 4
+            and then Row.Element (2) = 2.5 and then Row.Element (4) = -1.0
+            );
+        Check ("the packed form of this tape takes 50 bytes", Packed_Size = 50);
         Check ("the package name of a brain file", Records.Unit_Name_For ("brains/page.brn") = "Page_Brain");
         Check ("marks in the file name become underlines", Records.Unit_Name_For ("my-page.2.brn") = "My_Page_2_Brain");
         end Test_Records;
@@ -796,6 +833,21 @@ procedure Calipso_Tests is
             Web_Sources.Mentions_Of (Reader, Test_Site & "/index.html") = 4
             );
         Check ("the other site was never listed", Web_Sources.Mentions_Of (Reader, "http://elsewhere.example/") = 0);
+
+        Options.List_Size := 2;
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/index.html");
+        loop
+            Reader.Next_Piece (Piece, Found);
+            exit when not Found;
+            end loop;
+        Ada.Directories.Delete_File (Page_Work_File);
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check ("a waiting list of 2: the 4 pages are still read", Counts.Asked = 4 and then Counts.Read = 4);
+        Check (
+            "a waiting list of 2: 3 links are left out",
+            Counts.Left_Out = 3 and then Web_Sources.Waiting_Count (Reader) = 0
+            );
         end Test_Web_Sources;
 
     begin

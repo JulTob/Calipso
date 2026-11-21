@@ -3,11 +3,15 @@
 --  Usage:
 --     calipso_brain study BRAIN_FILE CORPUS [LESSONS] [RECIPE]
 --     calipso_brain compare CORPUS BRAIN_FILE [BRAIN_FILE ...]
+--     calipso_brain copy FROM_FILE TO_FILE
 --
 --  study   : loads the brain from BRAIN_FILE, or makes a new one from RECIPE if
 --            the file does not exist. It studies LESSONS more lessons, takes the
 --            exam, and saves the brain back. Run it again and it carries on.
 --  compare : gives the same exam to several saved brains.
+--  copy    : loads a brain and saves it under another name. The ending of the
+--            new name decides the form: .zmb is packed (small, to store and send),
+--            anything else is text that is also Ada (to read and to compile).
 --
 --  A recipe is a list of neuron names joined by "+":
 --     bias  position  presence  harmonic  decay  counting  memory
@@ -17,6 +21,7 @@
 with Ada.Command_Line;
 with Ada.Directories;
 with Ada.Exceptions;
+with Ada.Strings;
 with Ada.Strings.Fixed;
 
 with Calipso.Alphabets;
@@ -191,6 +196,31 @@ procedure Calipso_Brain is
         Show_Exam (Brain, Exam_Text);
         end Compare_One;
 
+    function Size_Image (
+            File_Name : in String
+            ) return String is
+        Size : constant Ada.Directories.File_Size := Ada.Directories.Size (File_Name);
+        begin
+        return Ada.Strings.Fixed.Trim (Ada.Directories.File_Size'Image (Size), Ada.Strings.Left);
+        end Size_Image;
+
+    procedure Run_Copy (
+            From_Name : in String;
+            To_Name   : in String
+            ) is
+        Brain : Brains.Brain;
+        begin
+        Brains.Load (Brain, From_Name);
+        Brains.Save (Brain, To_Name);
+        Console.Put_Line (
+            From_Name & ": " & Brains.Recipe_Of (Brain) & ", "
+            & Console.Image (Brains.Lessons_Studied (Brain)) & " lessons"
+            );
+        Console.Put_Line (
+            "Copied: " & Size_Image (From_Name) & " bytes -> " & Size_Image (To_Name) & " bytes in " & To_Name
+            );
+        end Run_Copy;
+
     function Whole_Number (
             Word : in String
             ) return Natural is
@@ -206,6 +236,7 @@ procedure Calipso_Brain is
         Console.Put_Line ("Usage:");
         Console.Put_Line ("   calipso_brain study BRAIN_FILE CORPUS [LESSONS] [RECIPE]");
         Console.Put_Line ("   calipso_brain compare CORPUS BRAIN_FILE [BRAIN_FILE ...]");
+        Console.Put_Line ("   calipso_brain copy FROM_FILE TO_FILE");
         end Show_Usage;
 
     procedure Study_Command is
@@ -234,6 +265,8 @@ procedure Calipso_Brain is
         Study_Command;
     elsif Ada.Command_Line.Argument_Count >= 3 and then Ada.Command_Line.Argument (1) = "compare" then
         Compare_Command;
+    elsif Ada.Command_Line.Argument_Count = 3 and then Ada.Command_Line.Argument (1) = "copy" then
+        Run_Copy (Ada.Command_Line.Argument (2), Ada.Command_Line.Argument (3));
     else
         Show_Usage;
         Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);

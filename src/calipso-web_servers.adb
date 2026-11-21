@@ -1,11 +1,10 @@
 with Ada.IO_Exceptions;
-with Ada.Streams;
-with Ada.Streams.Stream_IO;
 with Ada.Strings;
 with Ada.Strings.Fixed;
 
 with GNAT.Sockets;
 
+with Calipso.Texts;
 with Calipso.Web_Addresses;
 
 package body Calipso.Web_Servers is
@@ -161,24 +160,10 @@ package body Calipso.Web_Servers is
     function File_Content (
             File_Name : in String
             ) return Unbounded_String is
-        use Ada.Streams;
-        File    : Stream_IO.File_Type;
-        Buffer  : Stream_Element_Array (1 .. 4_096);
-        Last    : Stream_Element_Offset;
-        Content : Unbounded_String;
         begin
-        Stream_IO.Open (File, Stream_IO.In_File, File_Name);
-        loop
-            Stream_IO.Read (File, Buffer, Last);
-            for Index in 1 .. Last loop
-                Append (Content, Character'Val (Buffer (Index)));
-                end loop;
-            exit when Last < Buffer'Last;
-            end loop;
-        Stream_IO.Close (File);
-        return Content;
+        return Texts.Bytes_Of (File_Name);
         exception
-        when Ada.IO_Exceptions.Name_Error | Ada.IO_Exceptions.Use_Error =>
+        when Texts.Reading_Error =>
             raise Listening_Error with "cannot read the file " & File_Name;
         end File_Content;
 

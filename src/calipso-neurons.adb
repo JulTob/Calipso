@@ -1,3 +1,6 @@
+with Ada.Strings;
+with Ada.Strings.Fixed;
+
 package body Calipso.Neurons is
 
     function Is_Voter (
@@ -18,6 +21,30 @@ package body Calipso.Neurons is
             end if;
         return not Canvases.Is_Blank (Board, Neighbour);
         end Is_Voter;
+
+    function Image (
+            Value : in Natural
+            ) return String is
+        begin
+        return Ada.Strings.Fixed.Trim (Natural'Image (Value), Ada.Strings.Left);
+        end Image;
+
+    function With_Sizes (
+            Word         : in String;
+            First        : in Natural;
+            Usual_First  : in Natural;
+            Second       : in Natural;
+            Usual_Second : in Natural
+            ) return String is
+        begin
+        if Second /= Usual_Second then
+            return Word & ":" & Image (First) & ":" & Image (Second);
+            end if;
+        if First /= Usual_First then
+            return Word & ":" & Image (First);
+            end if;
+        return Word;
+        end With_Sizes;
 
     function Same (
             Left  : in Neuron'Class;

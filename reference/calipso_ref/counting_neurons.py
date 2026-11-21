@@ -18,16 +18,23 @@ from . import neurons
 from . import records
 
 
+DEFAULT_MEMORY = 1048576
+#-- How many counters the "memory" neuron has, unless the recipe says otherwise.
+
+
 class Counting_Neuron(neurons.Neuron):
 
     def __init__(self):
         self.oracle = counting_oracles.Counting_Oracle()
 
     def Name(self) -> str:
-        if self.oracle.table.capacity > 0:
-            return "memory"
+        longest = self.oracle.longest
+        usual = counting_oracles.DEFAULT_LONGEST
+        capacity = self.oracle.table.capacity
+        if capacity > 0:
+            return neurons.With_Sizes("memory", capacity, DEFAULT_MEMORY, longest, usual)
             #-- The same neuron with bounded memory goes by another name in recipes.
-        return "counting"
+        return neurons.With_Sizes("counting", longest, usual, 0, 0)
 
     def Kind(self) -> str:
         return "counting"

@@ -162,10 +162,17 @@ package body Calipso.Basis_Neurons is
             Self : in Basis_Neuron
             ) return String is
         begin
-        if Self.Measure = By_Harmonic and then Self.Detail = 0 then
-            return "presence";
-            end if;
-        return Word_Of (Self.Measure);
+        case Self.Measure is
+            when By_Position =>
+                return Neurons.With_Sizes ("position", Self.Vote_Reach, Default_Reach, 0, 0);
+            when By_Harmonic =>
+                if Self.Detail = 0 then
+                    return Neurons.With_Sizes ("presence", Self.Vote_Reach, Default_Reach, 0, 0);
+                    end if;
+                return Neurons.With_Sizes ("harmonic", Self.Vote_Reach, Default_Reach, Self.Detail, Default_Waves);
+            when By_Decay =>
+                return Neurons.With_Sizes ("decay", Self.Vote_Reach, Default_Reach, Self.Detail, Default_Speeds);
+            end case;
         end Name;
 
     overriding function Kind (
