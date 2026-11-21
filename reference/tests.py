@@ -291,6 +291,8 @@ def Test_Bounded_Memory(
     Check(fixture, "bounded memory: casa appears 5 times", fragment_counts.Count_Of(table, bytes(texts.Encoded("casa", fixture.letters))) == 5)
     Check(fixture, "bounded memory: 173 counters in use", fragment_counts.Distinct_Fragments(table) == 173)
     Check(fixture, "bounded memory: the scrambled number of la", fragment_counts.Hash(bytes(texts.Encoded("la", fixture.letters))) == 1585155634)
+    Check(fixture, "bounded memory: the check number of la", fragment_counts.Check_Of(bytes(texts.Encoded("la", fixture.letters))) == 1123950074)
+    Check(fixture, "bounded memory: a fragment never seen reads 0, even where a counter is taken", fragment_counts.Count_Of(table, bytes(texts.Encoded("laa", fixture.letters))) == 0)
 
 
 def Test_Basis_Neurons(

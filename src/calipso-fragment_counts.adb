@@ -8,17 +8,35 @@ package body Calipso.Fragment_Counts is
     --# FNV-1a recipe: a short, well-known way of turning a row
     --# of numbers into a single "scrambled" number for the table.
 
-    function Hash (
-            Piece : in Fragment
+    Check_Start : constant Ada.Containers.Hash_Type := 3141592653;
+    --# The same recipe from another starting number gives the check number.
+
+    function Scrambled (
+            Piece : in Fragment;
+            Start : in Ada.Containers.Hash_Type
             ) return Ada.Containers.Hash_Type is
-        Result : Ada.Containers.Hash_Type := Hash_Start;
+        Result : Ada.Containers.Hash_Type := Start;
         begin
         for Value of Piece loop
             Result := Result xor Ada.Containers.Hash_Type (Value);
             Result := Result * Hash_Prime;
             end loop;
         return Result;
+        end Scrambled;
+
+    function Hash (
+            Piece : in Fragment
+            ) return Ada.Containers.Hash_Type is
+        begin
+        return Scrambled (Piece, Hash_Start);
         end Hash;
+
+    function Check_Of (
+            Piece : in Fragment
+            ) return Ada.Containers.Hash_Type is
+        begin
+        return Scrambled (Piece, Check_Start);
+        end Check_Of;
 
     function Slice (
             Text   : in Texts.Symbol_Text;
@@ -51,6 +69,7 @@ package body Calipso.Fragment_Counts is
         Table.Counts.Clear;
         Table.Capacity := Capacity;
         Table.Slots := Slot_Vectors.To_Vector (0, Ada.Containers.Count_Type (Capacity));
+        Table.Checks := Check_Vectors.To_Vector (0, Ada.Containers.Count_Type (Capacity));
         end Limit;
 
     function Capacity_Of (
@@ -64,11 +83,34 @@ package body Calipso.Fragment_Counts is
             Table : in out Count_Table;
             Piece : in     Fragment
             ) is
-        Slot : constant Positive := Slot_Of (Table, Piece);
-        Seen : constant Natural := Table.Slots.Element (Slot);
+        Slot  : constant Positive := Slot_Of (Table, Piece);
+        Check : constant Ada.Containers.Hash_Type := Check_Of (Piece);
+        Seen  : constant Natural := Table.Slots.Element (Slot);
         begin
-        Table.Slots.Replace_Element (Slot, Seen + 1);
+        if Seen = 0 then
+            Table.Checks.Replace_Element (Slot, Check);
+            Table.Slots.Replace_Element (Slot, 1);
+        elsif Table.Checks.Element (Slot) = Check then
+            Table.Slots.Replace_Element (Slot, Seen + 1);
+        elsif Seen = 1 then
+            Table.Checks.Replace_Element (Slot, Check);
+            --# The owner's count would reach 0: the newcomer takes the counter, with a count of 1.
+        else
+            Table.Slots.Replace_Element (Slot, Seen - 1);
+            end if;
         end Add_One_Bounded;
+
+    function Count_Bounded (
+            Table : in Count_Table;
+            Piece : in Fragment
+            ) return Natural is
+        Slot : constant Positive := Slot_Of (Table, Piece);
+        begin
+        if Table.Checks.Element (Slot) /= Check_Of (Piece) then
+            return 0;
+            end if;
+        return Table.Slots.Element (Slot);
+        end Count_Bounded;
 
     procedure Add_One (
             Table : in out Count_Table;
@@ -97,7 +139,7 @@ package body Calipso.Fragment_Counts is
         Place : Count_Maps.Cursor;
         begin
         if Table.Capacity > 0 then
-            return Table.Slots.Element (Slot_Of (Table, Piece));
+            return Count_Bounded (Table, Piece);
             end if;
         Place := Table.Counts.Find (Piece);
         if Count_Maps.Has_Element (Place) then
@@ -147,6 +189,8 @@ package body Calipso.Fragment_Counts is
         for Slot in 1 .. Table.Capacity loop
             if Table.Slots.Element (Slot) > 0 then
                 Records.Write_Count (Tape, Slot);
+                Records.Write_Real (Tape, Long_Float (Table.Checks.Element (Slot)));
+                --# A check number can be larger than the largest whole number of the machine: it goes as a real.
                 Records.Write_Count (Tape, Table.Slots.Element (Slot));
                 end if;
             end loop;
@@ -204,12 +248,15 @@ package body Calipso.Fragment_Counts is
         Capacity : constant Natural := Records.Read_Count (Tape);
         Entries  : Natural;
         Slot     : Natural;
+        Check    : Long_Float;
         begin
         Limit (Table, Capacity);
         Entries := Records.Read_Count (Tape);
         for Entry_Number in 1 .. Entries loop
             if Capacity > 0 then
                 Slot := Records.Read_Count (Tape);
+                Check := Records.Read_Real (Tape);
+                Table.Checks.Replace_Element (Slot, Ada.Containers.Hash_Type (Check));
                 Table.Slots.Replace_Element (Slot, Records.Read_Count (Tape));
             else
                 Load_One_Fragment (Table, Tape);

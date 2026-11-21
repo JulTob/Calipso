@@ -377,6 +377,11 @@ procedure Calipso_Tests is
         Check ("bounded memory: casa appears 5 times", Fragment_Counts.Count_Of (Table, Piece_Of ("casa")) = 5);
         Check ("bounded memory: 173 counters in use", Fragment_Counts.Distinct_Fragments (Table) = 173);
         Check ("bounded memory: the scrambled number of la", Fragment_Counts.Hash (Piece_Of ("la")) = 1_585_155_634);
+        Check ("bounded memory: the check number of la", Fragment_Counts.Check_Of (Piece_Of ("la")) = 1_123_950_074);
+        Check (
+            "bounded memory: a fragment never seen reads 0, even where a counter is taken",
+            Fragment_Counts.Count_Of (Table, Piece_Of ("laa")) = 0
+            );
         end Test_Bounded_Memory;
 
     procedure Test_Basis_Neurons is

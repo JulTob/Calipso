@@ -22,6 +22,11 @@ package Calipso.Fragment_Counts is
             Piece : in Fragment
             ) return Ada.Containers.Hash_Type;
 
+    function Check_Of (
+            Piece : in Fragment
+            ) return Ada.Containers.Hash_Type;
+    --# A second scrambled number, different from Hash: the "check number" of a fragment.
+
     function Slice (
             Text   : in Texts.Symbol_Text;
             First  : in Positive;
@@ -39,8 +44,16 @@ package Calipso.Fragment_Counts is
             );
     --# Empties the table and fixes its size. 0 = exact memory. More than 0 =
     --# bounded memory: a fixed number of counters, however much text is read.
-    --# Fragments that land on the same counter share it: counts can only be
-    --# too high, never too low.
+    --#
+    --# With bounded memory each fragment has ONE counter where it may live,
+    --# chosen by its scrambled number. The counter also keeps the check number
+    --# of its owner, so that a fragment never seen is not mistaken for the
+    --# owner: it reads as 0, as it should.
+    --#
+    --# When a newcomer finds its counter taken by another fragment, it knocks
+    --# one off the owner's count; when that count reaches 0 the newcomer takes
+    --# the counter. So what is seen often stays, and what was seen once, long
+    --# ago, makes room: the memory forgets instead of filling up.
 
     function Capacity_Of (
             Table : in Count_Table
@@ -93,10 +106,20 @@ private
             Element_Type => Natural
             );
 
+    package Check_Vectors is new Ada.Containers.Vectors (
+            Index_Type   => Positive,
+            Element_Type => Ada.Containers.Hash_Type,
+            "="          => Ada.Containers."="
+            );
+
     type Count_Table is record
         Counts   : Count_Maps.Map;
+        --# Exact memory: fragment -> times seen.
         Capacity : Natural := 0;
         Slots    : Slot_Vectors.Vector;
+        --# Bounded memory: the count kept in each counter.
+        Checks   : Check_Vectors.Vector;
+        --# Bounded memory: the check number of the fragment each counter belongs to.
         end record;
 
     end Calipso.Fragment_Counts;
