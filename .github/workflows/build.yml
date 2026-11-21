@@ -21,7 +21,8 @@ jobs:
           sudo apt-get install -y gnat gprbuild
 
       - name: Build
-        run: gprbuild -p -P calipso.gpr
+        run: gprbuild -p -k -P calipso.gpr
+        #  -k : keep going after an error, so that one run reports every problem.
 
       - name: Tests
         run: ./bin/calipso_tests

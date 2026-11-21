@@ -70,7 +70,6 @@ package body Calipso.Web_Sources is
             Address : in     String
             ) is
         Unused : Boolean;
-        pragma Unreferenced (Unused);
         begin
         Note_Link (Self, Web_Addresses.Resolved (Address, Address), Unused);
         end Add_Address;
@@ -255,7 +254,6 @@ package body Calipso.Web_Sources is
             Content : in     Pages.Page_Content
             ) is
         Unused : Boolean;
-        pragma Unreferenced (Unused);
         begin
         for Piece of Content.Blocks loop
             if Piece.Kind = Pages.Picture or else Piece.Kind = Pages.Video or else Piece.Kind = Pages.Sound then
@@ -294,7 +292,6 @@ package body Calipso.Web_Sources is
             ) is
         Target : constant String := Web_Addresses.Resolved (Address, To_String (Answer.Moved_To));
         Unused : Boolean;
-        pragma Unreferenced (Unused);
         begin
         if Stays_Close (Self, Address, Target) then
             Note_Link (Self, Target, Unused);

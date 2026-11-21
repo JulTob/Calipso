@@ -431,8 +431,8 @@ procedure Calipso_Tests is
             Pupil : in out Brains.Brain
             ) is
         Unused : Blind_Spots.Exam_Result;
-        pragma Unreferenced (Unused);
         --# The score of these lessons is not needed here; only the trained brain is.
+        --# (The compiler knows a variable called Unused is meant to be left alone.)
         begin
         Brains.Prepare (Pupil, Letters);
         Brains.Add_Recipe (Pupil, "bias+presence+harmonic+decay+counting");

@@ -8,7 +8,6 @@ with GNAT.OS_Lib;
 
 package body Calipso.Curl_Fetchers is
 
-    use Ada.Strings.Unbounded;
     use type Ada.Directories.File_Size;
 
     Program_Name   : constant String := "curl";
@@ -39,7 +38,7 @@ package body Calipso.Curl_Fetchers is
                 return Result;
                 end if;
             Result.Outcome := Fetchers.Fetched;
-            Result.Label := To_Unbounded_String (Label);
+            Result.Label := Ada.Strings.Unbounded.To_Unbounded_String (Label);
             return Result;
             end if;
         if Code = "404" or else Code = "410" then
@@ -48,7 +47,7 @@ package body Calipso.Curl_Fetchers is
             end if;
         if Code'Length > 0 and then Code (Code'First) = '3' and then Moved_To /= "" then
             Result.Outcome := Fetchers.Moved;
-            Result.Moved_To := To_Unbounded_String (Moved_To);
+            Result.Moved_To := Ada.Strings.Unbounded.To_Unbounded_String (Moved_To);
             return Result;
             end if;
         return Result;
