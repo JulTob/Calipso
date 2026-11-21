@@ -7,7 +7,9 @@
 --  mismo juego será el ENTRENAMIENTO: tapar, apostar, destapar y corregir.
 
 with Colapso.Canvases;
+with Colapso.Oracles;
 with Colapso.Random_Sources;
+with Colapso.Texts;
 
 package Colapso.Blind_Spots is
 
@@ -29,5 +31,29 @@ package Colapso.Blind_Spots is
             ) return Score
         with Pre => Canvases.Length (Filled) = Canvases.Length (Original);
     --# Compara el lienzo rellenado con el original, celda a celda.
+
+    type Exam_Result is record
+        Hidden       : Natural := 0;
+        Hits         : Natural := 0;
+        Surprise_Sum : Long_Float := 0.0;
+        end record;
+
+    function Mean_Surprise (
+            Result : in Exam_Result
+            ) return Long_Float;
+
+    procedure Examine (
+            Model        : in     Oracles.Oracle'Class;
+            Text         : in     Texts.Symbol_Text;
+            Dice         : in out Random_Sources.Generator;
+            Pieces       : in     Natural;
+            Piece_Length : in     Positive;
+            Rate         : in     Random_Sources.Unit_Fraction;
+            Result       :    out Exam_Result
+            )
+        with Pre => Natural (Text.Length) > Piece_Length;
+    --# El mismo examen para cualquier cerebro: tapar letras al azar en trozos de
+    --# texto y preguntar por cada letra tapada, SIN rellenar las demás.
+    --# Mide dos cosas: cuántas acierta y cuánto le sorprende la letra real.
 
     end Colapso.Blind_Spots;

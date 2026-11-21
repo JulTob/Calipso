@@ -1,3 +1,6 @@
+with Colapso.Distributions;
+with Colapso.Templates;
+
 package body Colapso.Blind_Spots is
 
     use type Canvases.Cell_State;
@@ -35,5 +38,62 @@ package body Colapso.Blind_Spots is
             end loop;
         return Result;
         end Scored;
+
+    function Mean_Surprise (
+            Result : in Exam_Result
+            ) return Long_Float is
+        begin
+        if Result.Hidden = 0 then
+            return 0.0;
+            end if;
+        return Result.Surprise_Sum / Long_Float (Result.Hidden);
+        end Mean_Surprise;
+
+    procedure Grade_Cell (
+            Model    : in     Oracles.Oracle'Class;
+            Board    : in     Canvases.Canvas;
+            Position : in     Positive;
+            Actual   : in     Symbol;
+            Result   : in out Exam_Result
+            ) is
+        Belief : constant Distributions.Distribution := Model.Opinion (Board, Position);
+        begin
+        Result.Hidden := Result.Hidden + 1;
+        Result.Surprise_Sum := Result.Surprise_Sum + Distributions.Surprise_Of (Belief, Actual);
+        if Distributions.Most_Likely (Belief) = Actual then
+            Result.Hits := Result.Hits + 1;
+            end if;
+        end Grade_Cell;
+
+    procedure Examine (
+            Model        : in     Oracles.Oracle'Class;
+            Text         : in     Texts.Symbol_Text;
+            Dice         : in out Random_Sources.Generator;
+            Pieces       : in     Natural;
+            Piece_Length : in     Positive;
+            Rate         : in     Random_Sources.Unit_Fraction;
+            Result       :    out Exam_Result
+            ) is
+        Room   : constant Positive := Natural (Text.Length) - Piece_Length;
+        Start  : Natural;
+        Actual : Symbol;
+        begin
+        Result := (others => <>);
+        for Piece in 1 .. Pieces loop
+            Random_Sources.Draw_Index (Dice, Room, Start);
+            declare
+                Original : constant Canvases.Canvas := Templates.From_Text (Text, Start + 1, Piece_Length);
+                Board    : Canvases.Canvas := Original;
+                begin
+                Hide_At_Random (Board, Rate, Dice);
+                for Position in 1 .. Piece_Length loop
+                    if Canvases.Is_Blank (Board, Position) then
+                        Actual := Canvases.Symbol_At (Original, Position);
+                        Grade_Cell (Model, Board, Position, Actual, Result);
+                        end if;
+                    end loop;
+                end;
+            end loop;
+        end Examine;
 
     end Colapso.Blind_Spots;

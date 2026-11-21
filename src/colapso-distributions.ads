@@ -7,6 +7,7 @@
 --     A + B           juntar dos montones de evidencia
 --     Factor * A      darle más o menos fuerza a una opinión
 --     Normalized (A)  convertir cuentas en probabilidades
+--     From_Scores (P) convertir puntos en probabilidades
 
 package Colapso.Distributions is
 
@@ -19,10 +20,21 @@ package Colapso.Distributions is
     type Distribution (Size : Symbol) is private;
     --# Size es el número de letras del alfabeto sobre el que se opina.
 
+    type Score_Array is array (Symbol range <>) of Long_Float;
+    --# Puntos por letra: cualquier número, positivo o negativo. Más puntos = más probable.
+
     function Zero (
             Size : in Symbol
             ) return Distribution
         with Post => Zero'Result.Size = Size;
+
+    function From_Scores (
+            Scores : in Score_Array
+            ) return Distribution
+        with
+            Pre  => Scores'First = 1 and then Scores'Length >= 1,
+            Post => From_Scores'Result.Size = Scores'Last;
+    --# Convierte puntos en probabilidades (se llama "softmax").
 
     function Uniform (
             Size : in Symbol

@@ -21,6 +21,24 @@ package body Colapso.Distributions is
         return Result;
         end Uniform;
 
+    function From_Scores (
+            Scores : in Score_Array
+            ) return Distribution is
+        Highest : Long_Float := Scores (1);
+        Raw     : Distribution (Scores'Last);
+        begin
+        for Value in Symbol range 2 .. Scores'Last loop
+            if Scores (Value) > Highest then
+                Highest := Scores (Value);
+                end if;
+            end loop;
+        for Value in Symbol range 1 .. Scores'Last loop
+            Raw.Weights (Value) := Math.Exp (Scores (Value) - Highest);
+            --# Restar el máximo no cambia el resultado y evita números enormes.
+            end loop;
+        return Normalized (Raw);
+        end From_Scores;
+
     function Weight_Of (
             Item  : in Distribution;
             Value : in Symbol

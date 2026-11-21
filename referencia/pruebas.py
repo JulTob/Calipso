@@ -20,6 +20,7 @@ from colapso_ref import random_sources
 from colapso_ref import repairing
 from colapso_ref import templates
 from colapso_ref import texts
+from colapso_ref import voting_oracles
 
 CORPUS_TEXT = (
     "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
@@ -259,6 +260,57 @@ def Test_Blind_Spots(
     Check(fixture, "se recuperan 20 de 22", result.recovered == 20)
 
 
+def Test_Voting_Oracles(
+        fixture: Fixture
+        ) -> None:
+    size = alphabets.Size(fixture.letters)
+    letter_a = Symbol_For(fixture, "a")
+    board = templates.Parsed("la c_sa de", fixture.letters)
+
+    scores = [0.0, 0.0, 1.0, -1.0, 2.0]
+    #-- La posición 0 no se usa: los puntos son (0, 1, -1, 2).
+    shares = distributions.From_Scores(scores)
+    Check_Close(fixture, "puntos a probabilidades: letra 1", distributions.Weight_Of(shares, 1), 0.08714431874203257)
+    Check_Close(fixture, "puntos a probabilidades: letra 4", distributions.Weight_Of(shares, 4), 0.6439142598879724)
+    Check_Close(fixture, "puntos a probabilidades: suma 1", distributions.Total(shares), 1.0)
+
+    pupil = voting_oracles.Voting_Oracle()
+    voting_oracles.Prepare(pupil, size, 3)
+    belief = pupil.Opinion(board, 4)
+    Check_Close(fixture, "sin entrenar: todas las letras por igual", distributions.Probability_Of(belief, letter_a), 0.08333333333333333)
+    surprise = voting_oracles.Learn_Cell(pupil, board, 4, letter_a, 0.5)
+    Check_Close(fixture, "primera lección: sorpresa = ln 12", surprise, 2.4849066497880004)
+    belief = pupil.Opinion(board, 4)
+    Check_Close(fixture, "tras una lección la letra real es más probable", distributions.Probability_Of(belief, letter_a), 0.13034687344398008)
+
+    pupil = voting_oracles.Voting_Oracle()
+    voting_oracles.Prepare(pupil, size, 3)
+    plan = voting_oracles.Lesson_Plan()
+    plan.lessons = 60
+    plan.piece_length = 24
+    dice = random_sources.Seeded(11)
+    final_surprise = voting_oracles.Train(pupil, fixture.corpus, dice, plan)
+    Check_Close(fixture, "entrenar 60 lecciones: sorpresa final", final_surprise, 1.915541972753829)
+    belief = pupil.Opinion(board, 4)
+    Check_Close(fixture, "entrenado: P(a)", distributions.Probability_Of(belief, letter_a), 0.797228557731476)
+    Check(fixture, "entrenado: la más probable es a", distributions.Most_Likely(belief) == letter_a)
+
+    dice = random_sources.Seeded(4)
+    result = blind_spots.Examine(fixture.model, fixture.corpus, dice, 5, 24, 0.4)
+    Check(fixture, "examen del conteo: 35 aciertos de 45", result.hidden == 45 and result.hits == 35)
+    Check_Close(fixture, "examen del conteo: sorpresa media", blind_spots.Mean_Surprise(result), 0.6231927485060871)
+    dice = random_sources.Seeded(4)
+    result = blind_spots.Examine(pupil, fixture.corpus, dice, 5, 24, 0.4)
+    Check(fixture, "examen de los votos: 28 aciertos de 45", result.hidden == 45 and result.hits == 28)
+    Check_Close(fixture, "examen de los votos: sorpresa media", blind_spots.Mean_Surprise(result), 1.0526600853953112)
+
+    filled = templates.Parsed("la [12] rosa.", fixture.letters)
+    dice = random_sources.Seeded(1)
+    collapsing.Collapse_All(filled, pupil, dice)
+    Check(fixture, "el motor colapsa igual con otro cerebro", canvases.Blank_Count(filled) == 0)
+    Check(fixture, "colapso con votos, semilla 1", templates.Rendered(filled, fixture.letters, True) == "la [casasasde la] rosa.")
+
+
 def Main() -> None:
     fixture = Fixture()
     groups = [
@@ -271,6 +323,7 @@ def Main() -> None:
         ("Colapso", Test_Collapsing),
         ("Reparar y crecer", Test_Repairing),
         ("Puntos ciegos", Test_Blind_Spots),
+        ("Cerebro de votos", Test_Voting_Oracles),
         ]
     for title, group in groups:
         print(title)

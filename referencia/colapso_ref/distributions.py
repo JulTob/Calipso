@@ -61,6 +61,24 @@ def Uniform(
     return result
 
 
+def From_Scores(
+        scores: list
+        ) -> Distribution:
+    #-- Convierte puntos (cualquier número, positivo o negativo) en probabilidades.
+    #-- Más puntos = más probable. Se llama "softmax".
+    #-- `scores[símbolo]`; la posición 0 no se usa.
+    size = len(scores) - 1
+    highest = scores[1]
+    for symbol in range(2, size + 1):
+        if scores[symbol] > highest:
+            highest = scores[symbol]
+    raw = Distribution(size)
+    for symbol in range(1, size + 1):
+        raw.weights[symbol] = math.exp(scores[symbol] - highest)
+        #-- Restar el máximo no cambia el resultado y evita números enormes.
+    return Normalized(raw)
+
+
 def Weight_Of(
         item: Distribution,
         symbol: int

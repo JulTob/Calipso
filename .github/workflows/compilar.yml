@@ -42,6 +42,13 @@ jobs:
           cat ciegos_ada.txt
           diff ciegos_ada.txt ciegos_python.txt
 
+      - name: El entrenamiento con puntos ciegos en Ada y en Python debe dar las mismas cifras
+        run: |
+          time ./bin/colapso_votos data/muestra.txt 1500 > votos_ada.txt
+          time python3 referencia/votos.py data/muestra.txt 1500 > votos_python.txt
+          cat votos_ada.txt
+          diff votos_ada.txt votos_python.txt
+
   referencia:
     name: Referencia en Python
     runs-on: ubuntu-latest

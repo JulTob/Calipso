@@ -6,4 +6,4 @@ authors = ["Julio Toboso"]
 maintainers-logins = ["JulTob"]
 
 project-files = ["colapso.gpr"]
-executables = ["colapso_demo", "colapso_ciegos", "colapso_tests"]
+executables = ["colapso_demo", "colapso_ciegos", "colapso_votos", "colapso_tests"]

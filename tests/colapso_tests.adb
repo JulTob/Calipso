@@ -24,6 +24,7 @@ with Colapso.Random_Sources;
 with Colapso.Repairing;
 with Colapso.Templates;
 with Colapso.Texts;
+with Colapso.Voting_Oracles;
 
 procedure Colapso_Tests is
 
@@ -334,6 +335,63 @@ procedure Colapso_Tests is
         Check ("se recuperan 20 de 22", Result.Recovered = 20);
         end Test_Blind_Spots;
 
+    procedure Test_Voting_Oracles is
+        Board    : constant Canvases.Canvas := Templates.Parsed ("la c_sa de", Letters);
+        Letter_A : constant Symbol := Symbol_For ('a');
+        Scores   : constant Distributions.Score_Array (1 .. 4) := (0.0, 1.0, -1.0, 2.0);
+        Shares   : constant Distributions.Distribution := Distributions.From_Scores (Scores);
+        Pupil    : Voting_Oracles.Voting_Oracle;
+        Plan     : Voting_Oracles.Lesson_Plan := Voting_Oracles.Default_Plan;
+        Dice     : Random_Sources.Generator := Random_Sources.Seeded (11);
+        Surprise : Long_Float;
+        Result   : Blind_Spots.Exam_Result;
+        Filled   : Canvases.Canvas := Templates.Parsed ("la [12] rosa.", Letters);
+        begin
+        Check_Close ("puntos a probabilidades: letra 1", Distributions.Weight_Of (Shares, 1), 0.08714431874203257);
+        Check_Close ("puntos a probabilidades: letra 4", Distributions.Weight_Of (Shares, 4), 0.6439142598879724);
+        Check_Close ("puntos a probabilidades: suma 1", Distributions.Total (Shares), 1.0);
+
+        Voting_Oracles.Prepare (Pupil, Alphabets.Size (Letters), 3);
+        declare
+            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
+            begin
+            Check_Close ("sin entrenar: todas las letras por igual", Distributions.Probability_Of (Belief, Letter_A), 0.08333333333333333);
+            end;
+        Voting_Oracles.Learn_Cell (Pupil, Board, 5, Letter_A, 0.5, Surprise);
+        Check_Close ("primera lección: sorpresa = ln 12", Surprise, 2.4849066497880004);
+        declare
+            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
+            begin
+            Check_Close ("tras una lección la letra real es más probable", Distributions.Probability_Of (Belief, Letter_A), 0.13034687344398008);
+            end;
+
+        Voting_Oracles.Prepare (Pupil, Alphabets.Size (Letters), 3);
+        Plan.Lessons := 60;
+        Plan.Piece_Length := 24;
+        Voting_Oracles.Train (Pupil, Corpus, Dice, Surprise, Plan);
+        Check_Close ("entrenar 60 lecciones: sorpresa final", Surprise, 1.915541972753829);
+        declare
+            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
+            begin
+            Check_Close ("entrenado: P(a)", Distributions.Probability_Of (Belief, Letter_A), 0.797228557731476);
+            Check ("entrenado: la más probable es a", Distributions.Most_Likely (Belief) = Letter_A);
+            end;
+
+        Dice := Random_Sources.Seeded (4);
+        Blind_Spots.Examine (Model, Corpus, Dice, 5, 24, 0.4, Result);
+        Check ("examen del conteo: 35 aciertos de 45", Result.Hidden = 45 and then Result.Hits = 35);
+        Check_Close ("examen del conteo: sorpresa media", Blind_Spots.Mean_Surprise (Result), 0.6231927485060871);
+        Dice := Random_Sources.Seeded (4);
+        Blind_Spots.Examine (Pupil, Corpus, Dice, 5, 24, 0.4, Result);
+        Check ("examen de los votos: 28 aciertos de 45", Result.Hidden = 45 and then Result.Hits = 28);
+        Check_Close ("examen de los votos: sorpresa media", Blind_Spots.Mean_Surprise (Result), 1.0526600853953112);
+
+        Dice := Random_Sources.Seeded (1);
+        Collapsing.Collapse_All (Filled, Pupil, Dice);
+        Check ("el motor colapsa igual con otro cerebro", Canvases.Blank_Count (Filled) = 0);
+        Check_Mirror ("colapso con votos, semilla 1", Templates.Rendered (Filled, Letters, True), "la [casasasde la] rosa.");
+        end Test_Voting_Oracles;
+
     begin
     Prepare;
     Run_Group ("Azar repetible", Test_Random_Sources'Access);
@@ -345,6 +403,7 @@ procedure Colapso_Tests is
     Run_Group ("Colapso", Test_Collapsing'Access);
     Run_Group ("Reparar y crecer", Test_Repairing'Access);
     Run_Group ("Puntos ciegos", Test_Blind_Spots'Access);
+    Run_Group ("Cerebro de votos", Test_Voting_Oracles'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Fallos: " & Console.Image (Failures) & "   Avisos: " & Console.Image (Warnings));
     if Failures > 0 then
