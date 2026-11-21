@@ -232,11 +232,11 @@ numbers, a 2.3 MB `.brn` file of 102,527 lines.
 
 | Way in | Time |
 |---|---|
-| Read from the file (`Brains.Load`) | 33.3 ms |
-| Taken from the constants compiled into the program (`Brains.Thaw`) | 3.5 ms |
+| Read from the file (`Brains.Load`) | 33.3 ms, 26.2 ms |
+| Taken from the constants compiled into the program (`Brains.Thaw`) | 3.5 ms, 3.0 ms |
 
-Building the test program, the library and the brain file together took 15
-seconds. Both brains gave identical opinions.
+Two runs are shown. Building the test program, the library and the brain file
+together took 15 seconds. Both brains gave identical opinions.
 
 So compiling a brain in makes the start ten times faster, and saves three
 hundredths of a second. Once in memory there is no difference.
@@ -256,11 +256,12 @@ A site of four pages, one forbidden page and some files that are not pages
 
 | Test | Result |
 |---|---|
-| The whole sentence hidden | It wrote "Go back to the next. Start from one to the front door or to the next." 5 of 69 letters right. |
+| The whole sentence hidden | It wrote three lines: "And top you can sea", "The sea takes"tain", "The mountain is high and comer". 6 of 69 letters right. |
 | Half of its letters hidden | 17 of 31 hidden letters right (54.8 %). |
 
-With the whole sentence hidden the brain writes fluent pieces of what the site
-sounds like, and nothing tells it which sentence was there. With half the
+With the whole sentence hidden the brain writes pieces of what the site sounds
+like, some of them whole phrases it has read, and nothing tells it which
+sentence was there. With half the
 letters to hold on to, it recovers more than half of the rest. The first is
 writing, the second is recall.
 
