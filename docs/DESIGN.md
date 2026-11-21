@@ -315,6 +315,13 @@ from inside the program. A compiled brain cannot change: use the file while a
 brain is learning, and compile it in to ship a finished one. A very large
 brain is a very large source file, and the compiler is slow on it.
 
+A program can have both. `Brains.Take_Freshest` starts from the brain compiled
+in, unless the file beside it has studied more lessons: then it takes the
+file. So a rebuilt program never forgets what the file learned, and an old
+build never hides newer learning. To keep the file close to what is in
+memory, `calipso_crawl` saves its brain after every 50 lessons and the panel
+after every training.
+
 ### Bounded memory
 
 The `memory` neuron keeps its counts in a fixed number of counters, however

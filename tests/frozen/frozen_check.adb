@@ -94,9 +94,29 @@ procedure Frozen_Check is
             end if;
         end Check;
 
+    procedure Show_Freshest (
+            File_Name : in String
+            ) is
+        Compiled : Brains.Brain;
+        Freshest : Brains.Brain;
+        begin
+        Brains.Thaw (Compiled, Frozen_Brain.Words, Frozen_Brain.Numbers);
+        Brains.Take_Freshest (Freshest, Frozen_Brain.Words, Frozen_Brain.Numbers, File_Name);
+        Console.Put_Line (
+            "Inside the program: " & Console.Image (Brains.Lessons_Studied (Compiled))
+            & " lessons. The freshest brain has " & Console.Image (Brains.Lessons_Studied (Freshest)) & " lessons."
+            );
+        end Show_Freshest;
+    --# Which brain a program would start with: the one compiled in, or a file that has studied more.
+
     begin
+    if Ada.Command_Line.Argument_Count = 2 and then Ada.Command_Line.Argument (1) = "freshest" then
+        Show_Freshest (Ada.Command_Line.Argument (2));
+        return;
+        end if;
     if Ada.Command_Line.Argument_Count /= 1 then
         Console.Put_Line ("Usage: frozen_check BRAIN_FILE");
+        Console.Put_Line ("       frozen_check freshest BRAIN_FILE");
         Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
         return;
         end if;

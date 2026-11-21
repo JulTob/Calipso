@@ -37,13 +37,15 @@ with Calipso.Web_Sources;
 procedure Calipso_Crawl is
 
     use Calipso;
+    use type Blind_Spots.Exam_Result;
     use type Web_Addresses.Content_Kind;
 
     Default_Pages  : constant Natural := 20;
     Default_Recipe : constant String := "bias+position";
     Hiding_Seed    : constant Natural := 1_077;
-    Most_Lessons   : constant Natural := 1_000_000;
-    --# The study goes on until the pages run out; this is only a ceiling.
+    Save_Every     : constant Positive := 50;
+    --# The brain is saved after every stretch of this many lessons, so that
+    --# stopping the program half way loses little.
 
     Blanks : constant Ada.Strings.Maps.Character_Set :=
         Ada.Strings.Maps.To_Set (' ' & ASCII.HT & ASCII.CR);
@@ -149,6 +151,30 @@ procedure Calipso_Crawl is
         Ada.Text_IO.Close (File);
         end Write_Finds;
 
+    procedure Study_And_Save (
+            Brain      : in out Brains.Brain;
+            Brain_Name : in     String;
+            Source     : in out Web_Sources.Web_Source;
+            Dice       : in out Random_Sources.Generator;
+            Result     :    out Blind_Spots.Exam_Result
+            ) is
+        Stretch : Blind_Spots.Exam_Result;
+        Before  : Natural;
+        Studied : Natural;
+        begin
+        Result := (others => <>);
+        loop
+            Before := Brains.Lessons_Studied (Brain);
+            Brains.Study (Brain, Source, Dice, Save_Every, Stretch);
+            Studied := Brains.Lessons_Studied (Brain) - Before;
+            Result := Result + Stretch;
+            Brains.Save (Brain, Brain_Name);
+            exit when Studied < Save_Every;
+            --# A short stretch means the pages have run out.
+            end loop;
+        end Study_And_Save;
+    --# Studies until the pages run out, saving the brain after every stretch.
+
     procedure Run_Crawl (
             Brain_Name : in String;
             List_Name  : in String;
@@ -171,7 +197,7 @@ procedure Calipso_Crawl is
         Add_Start_List (Source, List_Name);
         Dice := Random_Sources.Seeded (Hiding_Seed + Brains.Lessons_Studied (Brain));
         Before := Brains.Lessons_Studied (Brain);
-        Brains.Study (Brain, Source, Dice, Most_Lessons, Result);
+        Study_And_Save (Brain, Brain_Name, Source, Dice, Result);
         Show_Tally (Source);
         Surprise := Blind_Spots.Mean_Surprise (Result);
         Console.Put_Line (
@@ -180,7 +206,6 @@ procedure Calipso_Crawl is
             & Console.Image (Surprise, 3) & " nats (" & Console.Image (Result.Hidden) & " letters)"
             );
         Console.Put_Line ("Lessons so far: " & Console.Image (Brains.Lessons_Studied (Brain)));
-        Brains.Save (Brain, Brain_Name);
         Console.Put_Line ("Saved to " & Brain_Name);
         Write_Finds (Source, Brain_Name & ".finds.txt");
         Console.Put_Line ("Finds listed in " & Brain_Name & ".finds.txt");

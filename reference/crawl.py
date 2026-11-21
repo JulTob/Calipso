@@ -30,8 +30,9 @@ from calipso_ref import web_sources
 DEFAULT_PAGES = 20
 DEFAULT_RECIPE = "bias+position"
 HIDING_SEED = 1077
-MOST_LESSONS = 1000000
-#-- The study goes on until the pages run out; this is only a ceiling.
+SAVE_EVERY = 50
+#-- The brain is saved after every stretch of this many lessons, so that
+#-- stopping the program half way loses little.
 
 
 class Bad_Argument(Exception):
@@ -105,6 +106,26 @@ def Write_Finds(
                 file.write(f"{kind} {address}\n")
 
 
+def Studied_And_Saved(
+        brain: brains.Brain,
+        brain_name: str,
+        source: web_sources.Web_Source,
+        dice
+        ) -> blind_spots.Exam_Result:
+    #-- Studies until the pages run out, saving the brain after every stretch.
+    result = blind_spots.Exam_Result()
+    while True:
+        before = brain.lessons
+        stretch = brains.Study(brain, source, dice, SAVE_EVERY)
+        studied = brain.lessons - before
+        result = blind_spots.Added(result, stretch)
+        brains.Save(brain, brain_name)
+        if studied < SAVE_EVERY:
+            break
+            #-- A short stretch means the pages have run out.
+    return result
+
+
 def Run_Crawl(
         brain_name: str,
         list_name: str,
@@ -120,12 +141,11 @@ def Run_Crawl(
     Add_Start_List(source, list_name)
     dice = random_sources.Seeded(HIDING_SEED + brain.lessons)
     before = brain.lessons
-    result = brains.Study(brain, source, dice, MOST_LESSONS)
+    result = Studied_And_Saved(brain, brain_name, source, dice)
     Show_Tally(source)
     surprise = blind_spots.Mean_Surprise(result)
     print(f"Studied {brain.lessons - before} lessons. While studying: right {Percent_Image(result.hits, result.hidden)} %, mean surprise {surprise:.3f} nats ({result.hidden} letters)")
     print(f"Lessons so far: {brain.lessons}")
-    brains.Save(brain, brain_name)
     print(f"Saved to {brain_name}")
     Write_Finds(source, brain_name + ".finds.txt")
     print(f"Finds listed in {brain_name}.finds.txt")

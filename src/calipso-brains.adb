@@ -1,3 +1,4 @@
+with Ada.Directories;
 with Ada.Strings.Unbounded;
 
 with Calipso.Neuron_Kinds;
@@ -304,6 +305,24 @@ package body Calipso.Brains is
         Records.Fill (Tape, Words, Figures);
         Read_Brain (Self, Tape);
         end Thaw;
+
+    procedure Take_Freshest (
+            Self      : in out Brain;
+            Words     : in     Records.Word_List;
+            Figures   : in     Records.Number_List;
+            File_Name : in     String
+            ) is
+        Kept : Brain;
+        begin
+        Thaw (Self, Words, Figures);
+        if not Ada.Directories.Exists (File_Name) then
+            return;
+            end if;
+        Load (Kept, File_Name);
+        if Kept.Studied > Self.Studied then
+            Self := Kept;
+            end if;
+        end Take_Freshest;
 
     overriding function Alphabet_Size (
             Self : in Brain

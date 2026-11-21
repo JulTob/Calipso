@@ -146,6 +146,17 @@ package Calipso.Brains is
     --# Words and Figures are the two constants (Words and Numbers) its package declares.
     --# Raises Records.Record_Error if they are not a saved brain.
 
+    procedure Take_Freshest (
+            Self      : in out Brain;
+            Words     : in     Records.Word_List;
+            Figures   : in     Records.Number_List;
+            File_Name : in     String
+            );
+    --# For a program with a brain compiled in that also keeps a brain file.
+    --# Takes the brain compiled in, unless the file exists and has studied MORE
+    --# lessons: then it takes the file. So a rebuilt program never forgets
+    --# what the file learned, and an old build never hides newer learning.
+
     overriding function Alphabet_Size (
             Self : in Brain
             ) return Symbol;

@@ -70,6 +70,11 @@ jobs:
           wc -l -c tests/frozen/frozen.brn
           time gprbuild -p -q -P tests/frozen/frozen.gpr
           ./tests/frozen/bin/frozen_check tests/frozen/frozen.brn
+          ./tests/frozen/bin/frozen_check freshest tests/frozen/frozen.brn | tee freshest_same.txt
+          grep -q "The freshest brain has 20 lessons" freshest_same.txt
+          ./bin/calipso_brain study tests/frozen/frozen.brn data/sample_es.txt 10 > /dev/null
+          ./tests/frozen/bin/frozen_check freshest tests/frozen/frozen.brn | tee freshest_file.txt
+          grep -q "Inside the program: 20 lessons. The freshest brain has 30 lessons" freshest_file.txt
 
       - name: The robot reads a small web site over real HTTP - the same in Ada and in Python
         run: |
