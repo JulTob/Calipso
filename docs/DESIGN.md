@@ -172,6 +172,14 @@ of neuron is a new package plus one line there.
 | `counting` | The table of fragment counts of section 3, as one neuron. | |
 | `memory` | The same table with a fixed number of counters. | |
 
+A name can carry **sizes**: `position:24`, `harmonic:16:6`, `decay:24:8`,
+`counting:9`, `memory:16777216:9`. The first size is how far the neuron looks
+(or, for the counting kinds, the longest fragment or the number of counters);
+the second is how many waves or fading speeds. A size left out takes its usual
+value, and a brain says its recipe back with the sizes that are not the usual
+ones. This is how a larger brain is built to fit a larger machine: no code
+changes, only the recipe.
+
 `position`, `presence`, `harmonic` and `decay` are one package
 (`Calipso.Basis_Neurons`): they differ only in the set of curves over distance
 (the "basis") by which a neighbour's vote is weighed.
@@ -249,6 +257,23 @@ What is not a page is not thrown away. Its address is filed under its kind
 An address is never listed twice. When it is linked again it gains a
 **mention**, a count of how many links point to it.
 
+**Fixed sizes.** Everything the scraper remembers has a size chosen in its
+settings, so a long walk needs no more memory than a short one:
+
+- the **waiting list** of addresses to visit is a ring of `List_Size` places
+  (1,024 unless said). When it is full, new links are left out; a later link
+  to the same address can list it once there is room;
+- the **seen table**, which says which addresses are known and counts their
+  mentions, has `Seen_Size` places and works like the bounded memory of the
+  brain: each address has one place, with a check number saying whose it is,
+  and a newcomer wears the owner down before taking the place. An address
+  forgotten this way may be read again;
+- a **time limit** stops it asking for new pages after so many minutes.
+
+A size that is a power of two makes no measurable difference to speed here: a
+page costs about a second of waiting, and a step on the list costs a millionth
+of that. What a fixed size buys is memory that stays put.
+
 Redirections are not followed blindly: the new address is treated like any
 other link, so it passes the same checks.
 
@@ -322,6 +347,20 @@ build never hides newer learning. To keep the file close to what is in
 memory, `calipso_crawl` saves its brain after every 50 lessons and the panel
 after every training.
 
+### Packed brains
+
+A tape can also be kept packed, in a `.zmb` file: the same words and numbers
+as raw bytes. A count takes as few bytes as it needs (7 bits in each byte, and
+the top bit says "there is more"); any other number is the 8 bytes of the real
+as the machine keeps it, lowest byte first. Nothing is lost. Measured: a brain
+of 4.06 MB as text is 0.99 MB packed, and one of 3.11 MB is 0.55 MB.
+
+This is packing, not general compression of the kind a zip file does: that
+needs a library standard Ada does not carry. The `.brn` form is for reading
+and compiling; the `.zmb` form is for storing and sending. `Records.Save`
+chooses by the ending of the name, `Records.Load` by the first four bytes of
+the file, and `calipso_brain copy` turns one into the other.
+
 ### Bounded memory
 
 The `memory` neuron keeps its counts in a fixed number of counters, however
@@ -362,6 +401,19 @@ web pages, and one per ending for other files that are text inside (`txt.brn`,
 Pictures, films and sounds have no brain yet. Their files are compressed, and
 compressed bytes look like noise: they would have to be unpacked into pixels
 or sound samples first.
+
+### Training on GitHub
+
+The workflow `.github/workflows/train.yml` ("Train a brain") runs the scraper
+and a brain on GitHub's machines. It is started by hand from the Actions tab
+with an address, a name for the brain, a number of minutes, and the sizes.
+It takes the brain of that name from the release called `brains` if there is
+one, trains, and puts it back, so each run carries on from the last. Brains
+are kept as release files and not committed, because a file of megabytes
+committed on every run would stay in the history of the repository for good.
+
+When the workflow file itself changes in a pull request it does a trial run on
+the little test site and keeps nothing.
 
 ## 9. Decisions taken, and why
 

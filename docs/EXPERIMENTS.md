@@ -1,6 +1,6 @@
 # Experiments
 
-Nine questions about the collapse idea and the machinery around it, with figures.
+Ten questions about the collapse idea and the machinery around it, with figures.
 
 ## How they were run
 
@@ -265,6 +265,24 @@ sentence was there. With half the
 letters to hold on to, it recovers more than half of the rest. The first is
 writing, the second is recall.
 
+## E10. How much smaller is a packed brain?
+
+Ada, on GitHub. The two brains of the build, saved as text (`.brn`) and packed
+(`.zmb`) with `calipso_brain copy`.
+
+| Brain | As text | Packed | Times smaller |
+|---|---|---|---|
+| `bias+position+decay`, 600 lessons | 4,058,352 bytes | 991,841 bytes | 4.1 |
+| `counting+bias+harmonic`, 200 lessons | 3,107,483 bytes | 549,809 bytes | 5.7 |
+
+Both forms gave the same exam figures, a brain unpacked again gave the same,
+and each language read the packed files the other wrote. The packed files
+written by Ada and by the mirror have the same size to the byte.
+
+The brain with a counting neuron packs better because its table is all small
+whole numbers, which take one or two bytes each. Votes are real numbers, and
+those take eight bytes however they are written.
+
 ## Summary
 
 | Part of the idea | Does it hold? |
@@ -276,4 +294,5 @@ writing, the second is recall.
 | Training with random blind spots | Yes, it learns, and every lesson doubles as a test. Single votes stay well below counting; a mix of both is the best brain so far. |
 | Fourier and Laplace as ways of looking | Laplace (fading with distance) comes within 3 or 4 points of exact positions with a third of the numbers. Fourier (waves) did not help as built. |
 | Memory of a fixed size | Yes, once each counter knows whose it is. |
+| Brains that are small to store and send | Yes: packed, four to six times smaller, nothing lost. |
 | Text with meaning | **Not yet.** It is the limit of these brains, not of the engine. |

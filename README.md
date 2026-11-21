@@ -60,7 +60,8 @@ With [Alire](https://alire.ada.dev): `alr build`.
 | `calipso_exam CORPUS` | Hides letters of real text and counts how many the counting brain recovers. |
 | `calipso_brain study BRAIN CORPUS [LESSONS] [RECIPE]` | Loads a brain (or makes a new one), studies more lessons, examines it, saves it. Run it again and it carries on. |
 | `calipso_brain compare CORPUS BRAIN...` | Gives the same exam to several saved brains. |
-| `calipso_crawl BRAIN START_LIST [PAGES] [RECIPE]` | A brain studies pages from the web, starting from a list of addresses. |
+| `calipso_brain copy FROM TO` | Saves a brain under another name. A name ending in `.zmb` is packed; any other is text. |
+| `calipso_crawl BRAIN START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]` | A brain studies pages from the web, starting from a list of addresses. |
 | `calipso_panel [BRAIN_FOLDER] [PORT]` | The panel. Open `http://127.0.0.1:8080` in your browser. |
 | `calipso_serve FOLDER [PORT]` | Serves a folder as a small site, for tests. |
 
@@ -98,6 +99,12 @@ add up, so kinds can be mixed. A **recipe** names the neurons, joined by `+`.
 | `counting` | A table of how often each short piece of text was seen. |
 | `memory` | The same table with a fixed number of counters. |
 
+Each name can carry **sizes**, so the same code builds a larger brain to fit
+the machine: `position:24` looks 24 letters each way instead of 12,
+`decay:24:8` fades at 8 speeds, `counting:9` counts pieces of up to 9 letters,
+`memory:16777216` has sixteen million counters. Leave a size out and the usual
+one is taken.
+
 The order in which holes collapse is a module too (`Calipso.Criteria`): by
 certainty, by agreement among the neurons, left to right, or a weighted mix.
 
@@ -129,6 +136,16 @@ end Naming;
 (a program cannot rewrite its own code), and compile it in to ship a finished
 one. Once in memory both work at the same speed.
 
+A brain can also be kept **packed**, in a `.zmb` file: the same words and
+numbers as raw bytes instead of written-out text. Nothing is lost, and it is
+four to six times smaller. Every program takes either form; the ending of the
+name decides.
+
+```
+./bin/calipso_brain copy page.brn page.zmb     # pack, to store or send
+./bin/calipso_brain copy page.zmb page.brn     # unpack, to read or compile
+```
+
 ## The panel
 
 ```
@@ -158,8 +175,28 @@ The panel answers only your own computer.
 - It introduces itself by name to every site.
 - It does not download pictures, films or sounds: it files their addresses.
 
+- Its memory has a fixed size: a waiting list of links (`list=1024`) and a
+  table of addresses already seen. A long walk needs no more than a short one.
+
 `robots.txt` says what may be fetched. Whether the text may be used is your
 decision. Fetching uses the program `curl`, which is already on macOS.
+
+## Training on GitHub
+
+The workflow **Train a brain** does the same on GitHub's machines. In the
+*Actions* tab choose it, press *Run workflow*, and give:
+
+| Field | Meaning |
+|---|---|
+| address | where to start |
+| brain | the name of the brain; the same name carries on next time |
+| minutes | how long to train (at most 300) |
+| pages, list | the most pages to read, and the size of the waiting list |
+| recipe | the neurons of a new brain |
+
+The brain is kept as a file of the release called `brains` (`page.zmb`), from
+where you can download it. The button appears once the workflow is on the
+main branch.
 
 ## What has been measured
 
@@ -176,6 +213,7 @@ cautions in [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
 | Do the Fourier and Laplace neurons help? | Laplace comes within 3 or 4 points of exact positions with a third of the numbers. Fourier did not help as built. |
 | Can memory have a fixed size? | Yes: 67 % against 68 % for exact memory, after a fault found by measuring was fixed. |
 | File or compiled in? | 33 ms against 3.5 ms to start, for a brain of 100,000 numbers. No difference after that. |
+| How much smaller is a packed brain? | 4.1 and 5.7 times smaller for the two brains measured, with nothing lost. |
 
 ## Limits
 
