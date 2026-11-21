@@ -47,6 +47,19 @@ def Learn_Alphabet(
     For_Each_Character(file_name, Note_Character)
 
 
+def Whole_Text(
+        file_name: str
+        ) -> str:
+    #-- All the letters of a file, as they are.
+    gathered = []
+
+    def Keep_Character(char):
+        gathered.append(char)
+
+    For_Each_Character(file_name, Keep_Character)
+    return "".join(gathered)
+
+
 def Read_Symbols(
         file_name: str,
         letters: alphabets.Alphabet

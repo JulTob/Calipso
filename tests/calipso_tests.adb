@@ -13,6 +13,7 @@ with Ada.Command_Line;
 with Ada.Containers;
 with Ada.Directories;
 with Ada.Exceptions;
+with Ada.Strings.Wide_Wide_Unbounded;
 
 with Calipso.Alphabets;
 with Calipso.Basis_Neurons;
@@ -27,15 +28,20 @@ with Calipso.Counting_Oracles;
 with Calipso.Criteria;
 with Calipso.Distributions;
 with Calipso.File_Sources;
+with Calipso.Folder_Fetchers;
 with Calipso.Fragment_Counts;
 with Calipso.Memory_Sources;
 with Calipso.Neuron_Kinds;
 with Calipso.Neurons;
 with Calipso.Oracles;
+with Calipso.Pages;
 with Calipso.Random_Sources;
 with Calipso.Repairing;
+with Calipso.Robots;
 with Calipso.Templates;
 with Calipso.Texts;
+with Calipso.Web_Addresses;
+with Calipso.Web_Sources;
 
 procedure Calipso_Tests is
 
@@ -43,7 +49,11 @@ procedure Calipso_Tests is
     use type Ada.Containers.Hash_Type;
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
+    use type Pages.Block_Kind;
     use type Texts.Symbol_Text;
+    use type Web_Addresses.Content_Kind;
+
+    package Wide_Texts renames Ada.Strings.Wide_Wide_Unbounded;
 
     Corpus_Text : constant Wide_Wide_String :=
         "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
@@ -53,6 +63,9 @@ procedure Calipso_Tests is
     Saved_Brain  : constant String := "brain_test_saved.txt";
     Python_Brain : constant String := "tests/data/brain_from_python.txt";
     Sample_File  : constant String := "data/sample_es.txt";
+    Test_Site    : constant String := "http://test.site";
+    Site_Folder  : constant String := "tests/site";
+    Page_Work_File : constant String := "page_test_work.tmp";
     --# The tests are run from the top folder of the project.
     Tolerance    : constant Long_Float := 1.0E-9;
 
@@ -586,6 +599,166 @@ procedure Calipso_Tests is
         Check ("file source: the first piece is the start of the file", First_Matches);
         end Test_Sources;
 
+    procedure Test_Web_Addresses is
+        Base : constant String := "http://test.site/sub/c.html?x=1";
+        begin
+        Check ("a link one folder up", Web_Addresses.Resolved (Base, "../a.html") = "http://test.site/a.html");
+        Check ("a link from the top of the site", Web_Addresses.Resolved (Base, "/index.html") = "http://test.site/index.html");
+        Check ("the part after # is dropped", Web_Addresses.Resolved (Base, "d.html#top") = "http://test.site/sub/d.html");
+        Check ("a link to the same page leads nowhere", Web_Addresses.Resolved (Base, "#top") = "");
+        Check ("a mail link cannot be followed", Web_Addresses.Resolved (Base, "mailto:me@test.site") = "");
+        Check ("a full address gets its final slash", Web_Addresses.Resolved (Base, "http://other.org") = "http://other.org/");
+        Check ("a link that only changes the question", Web_Addresses.Resolved (Base, "?page=2") = "http://test.site/sub/c.html?page=2");
+        Check ("stay-here and go-up parts are worked out", Web_Addresses.Resolved (Base, "./e/../f.html") = "http://test.site/sub/f.html");
+        Check ("going up too far stops at the top", Web_Addresses.Resolved (Base, "../../..") = "http://test.site/");
+        Check ("a link with a space is dropped", Web_Addresses.Resolved (Base, "a b.html") = "");
+        Check ("the host of an address", Web_Addresses.Host_Of ("https://test.site:8080/a/b") = "test.site:8080");
+        Check ("by name: no ending may be a page", Web_Addresses.Kind_By_Name ("http://test.site/wiki/Sea") = Web_Addresses.Page);
+        Check ("by name: a picture, even in capitals", Web_Addresses.Kind_By_Name ("http://test.site/a.PNG?x=1.html") = Web_Addresses.Picture);
+        Check ("by name: a film", Web_Addresses.Kind_By_Name ("http://test.site/clip.mp4") = Web_Addresses.Video);
+        Check ("by name: program code is writing", Web_Addresses.Kind_By_Name ("http://test.site/tool.py") = Web_Addresses.Writing);
+        Check ("by label: a page", Web_Addresses.Kind_By_Label ("Text/HTML; charset=utf-8") = Web_Addresses.Page);
+        Check ("by label: a drawing written as text is writing", Web_Addresses.Kind_By_Label ("image/svg+xml") = Web_Addresses.Writing);
+        Check ("by label: unknown bytes are other", Web_Addresses.Kind_By_Label ("application/octet-stream") = Web_Addresses.Other);
+        Check ("the sense of program code is its ending", Web_Addresses.Sense_Of ("http://test.site/tool.py", Web_Addresses.Writing) = "py");
+        Check ("the sense of a page is page", Web_Addresses.Sense_Of ("http://test.site/a.html", Web_Addresses.Page) = "page");
+        end Test_Web_Addresses;
+
+    Page_Markup : constant Wide_Wide_String :=
+        "<html><head><title>Test &amp; page</title><style>p {color: red}</style>"
+        & "<script>var a = '<p>not text</p>';</script></head><body><!-- a <b>comment</b> -->"
+        & "<h1>Hello   world</h1><p>First <a href=""a.html?x=1&amp;y=2"">link</a> and "
+        & "<A HREF='b.html'>another</A>&nbsp;one &#233; &bogus; AT&T.</p>"
+        & "<img alt=""x"" src=""pic.png""><p>Second<br>third <video src=clip.mp4 controls></video> end</p>"
+        & "<svg><circle/></svg>tail <a>no link</a> <a title=""href=x"" href = c.html >c</a>";
+
+    function Block_Text (
+            Content : in Pages.Page_Content;
+            Index   : in Positive
+            ) return Wide_Wide_String is
+        begin
+        return Wide_Texts.To_Wide_Wide_String (Content.Blocks.Element (Index).Text);
+        end Block_Text;
+
+    function Block_Kind_At (
+            Content : in Pages.Page_Content;
+            Index   : in Positive
+            ) return Pages.Block_Kind is
+        begin
+        return Content.Blocks.Element (Index).Kind;
+        end Block_Kind_At;
+
+    procedure Test_Pages is
+        Content  : constant Pages.Page_Content := Pages.Read (Wide_Texts.To_Unbounded_Wide_Wide_String (Page_Markup));
+        E_Acute  : constant Wide_Wide_Character := Wide_Wide_Character'Val (233);
+        Expected : constant Wide_Wide_String := "First link and another one " & E_Acute & " &bogus; AT&T.";
+        begin
+        Check ("the page is taken apart into 10 blocks", Natural (Content.Blocks.Length) = 10);
+        Check ("the title is the first paragraph", Block_Kind_At (Content, 1) = Pages.Words and then Block_Text (Content, 1) = "Test & page");
+        Check ("runs of spaces count as one", Block_Text (Content, 2) = "Hello world");
+        Check ("letters written by name or number are read", Block_Text (Content, 3) = Expected);
+        Check ("a picture keeps its place and its address", Block_Kind_At (Content, 4) = Pages.Picture and then Block_Text (Content, 4) = "pic.png");
+        Check ("a line break starts a new paragraph", Block_Text (Content, 5) = "Second" and then Block_Text (Content, 6) = "third");
+        Check ("a film keeps its place and its address", Block_Kind_At (Content, 7) = Pages.Video and then Block_Text (Content, 7) = "clip.mp4");
+        Check ("a drawing inside the page keeps its place", Block_Kind_At (Content, 9) = Pages.Drawing);
+        Check ("the last paragraph", Block_Text (Content, 10) = "tail no link c");
+        Check (
+            "three links, as written",
+            Natural (Content.Links.Length) = 3 and then Content.Links.Element (1) = "a.html?x=1&y=2"
+            and then Content.Links.Element (2) = "b.html" and then Content.Links.Element (3) = "c.html"
+            );
+        Check ("the words of the page, one paragraph per line", Wide_Texts.Length (Pages.Text_Of (Content)) = 99);
+        end Test_Pages;
+
+    Line_End : constant Wide_Wide_String := (1 => Wide_Wide_Character'Val (10));
+
+    Rules_Text : constant Wide_Wide_String :=
+        "# rules for the test" & Line_End
+        & "User-agent: otherbot" & Line_End
+        & "Disallow: /" & Line_End
+        & Line_End
+        & "User-agent: *" & Line_End
+        & "Disallow: /private/" & Line_End
+        & "Allow: /private/open/" & Line_End
+        & "Disallow: /*.pdf$" & Line_End
+        & "Disallow: /search?*q=" & Line_End
+        & "Crawl-delay: 5" & Line_End
+        & "Disallow:" & Line_End;
+
+    Our_Rules_Text : constant Wide_Wide_String :=
+        Rules_Text & "User-agent: calipso" & Line_End & "Disallow: /only-us/" & Line_End;
+
+    procedure Test_Robots is
+        Rules : constant Robots.Rule_Set := Robots.Parsed (Wide_Texts.To_Unbounded_Wide_Wide_String (Rules_Text), "Calipso");
+        Named : constant Robots.Rule_Set := Robots.Parsed (Wide_Texts.To_Unbounded_Wide_Wide_String (Our_Rules_Text), "Calipso");
+        begin
+        Check ("the top of the site is allowed", Robots.Allows (Rules, "/"));
+        Check ("a forbidden folder", not Robots.Allows (Rules, "/private/x"));
+        Check ("the longest rule that fits decides", Robots.Allows (Rules, "/private/open/x"));
+        Check ("a rule with * and $: ends in .pdf", not Robots.Allows (Rules, "/a/b.pdf"));
+        Check ("a rule with $ does not fit a longer path", Robots.Allows (Rules, "/a/b.pdfx"));
+        Check ("a rule with * in the middle", not Robots.Allows (Rules, "/search?a=1&q=2"));
+        Check ("the same rule, when the end is missing", Robots.Allows (Rules, "/search?a=1"));
+        Check ("the site asks for 5 seconds between requests", Robots.Delay_Of (Rules) = 5.0);
+        Check (
+            "rules that name us replace the rules for everybody",
+            Robots.Allows (Named, "/private/x") and then not Robots.Allows (Named, "/only-us/x")
+            );
+        Check ("no rules at all: everything is allowed", Robots.Allows (Robots.Allow_Everything, "/x"));
+        Check ("rules that could not be read: nothing is allowed", not Robots.Allows (Robots.Allow_Nothing, "/x"));
+        end Test_Robots;
+
+    procedure Test_Web_Sources is
+        Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
+        Options    : Web_Sources.Settings;
+        Site       : Folder_Fetchers.Folder_Fetcher;
+        Reader     : Web_Sources.Web_Source;
+        Piece      : Texts.Symbol_Text;
+        Found      : Boolean;
+        Count      : Natural := 0;
+        Good_Start : Boolean := False;
+        Counts     : Web_Sources.Tally;
+        Opening    : constant Wide_Wide_String :=
+            "The little test site" & Line_End & "The little test site" & Line_End & "This site is small";
+        begin
+        Check ("the common alphabet has 144 symbols", Alphabets.Size (Common) = 144);
+        Options.Pause := 0.0;
+        Folder_Fetchers.Prepare (Site, Test_Site, Site_Folder);
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/index.html");
+        loop
+            Reader.Next_Piece (Piece, Found);
+            exit when not Found;
+            Count := Count + 1;
+            if Count = 1 then
+                Good_Start := Texts.Decoded (Piece, Common) (1 .. Opening'Length) = Opening;
+                end if;
+            end loop;
+        Ada.Directories.Delete_File (Page_Work_File);
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check ("the site gives 17 pieces of 64 letters", Count = 17);
+        Check ("the first piece starts with the title", Good_Start);
+        Check ("5 pages asked for, 4 read, 1113 letters", Counts.Asked = 5 and then Counts.Read = 4 and then Counts.Letters = 1_113);
+        Check ("the private page is refused by the site's rules", Counts.Refused = 1);
+        Check (
+            "the file with no ending is asked for, and is not text",
+            Counts.Not_Text = 1 and then Web_Sources.Find_Count (Reader, Web_Addresses.Other) = 1
+            );
+        Check ("nothing failed", Counts.Failed = 0);
+        Check (
+            "files that are not pages are filed by kind, never asked for",
+            Web_Sources.Find_Count (Reader, Web_Addresses.Writing) = 2
+            and then Web_Sources.Find_Count (Reader, Web_Addresses.Picture) = 1
+            and then Web_Sources.Find_Count (Reader, Web_Addresses.Video) = 1
+            and then Web_Sources.Find_Count (Reader, Web_Addresses.Sound) = 1
+            );
+        Check (
+            "a page linked again is not listed again: it gets mentions",
+            Web_Sources.Mentions_Of (Reader, Test_Site & "/index.html") = 4
+            );
+        Check ("the other site was never listed", Web_Sources.Mentions_Of (Reader, "http://elsewhere.example/") = 0);
+        end Test_Web_Sources;
+
     begin
     Prepare;
     Run_Group ("Repeatable randomness", Test_Random_Sources'Access);
@@ -602,6 +775,10 @@ procedure Calipso_Tests is
     Run_Group ("Brains", Test_Brains'Access);
     Run_Group ("Criteria", Test_Criteria'Access);
     Run_Group ("Sources", Test_Sources'Access);
+    Run_Group ("Web addresses", Test_Web_Addresses'Access);
+    Run_Group ("Pages", Test_Pages'Access);
+    Run_Group ("Site rules", Test_Robots'Access);
+    Run_Group ("Web source", Test_Web_Sources'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

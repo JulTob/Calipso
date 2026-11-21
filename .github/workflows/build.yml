@@ -62,6 +62,20 @@ jobs:
           diff cross_ada.txt cross_python.txt
           diff own_ada.txt own_python.txt
 
+      - name: The robot reads a small web site over real HTTP - the same in Ada and in Python
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory tests/site > site_server.log 2>&1 &
+          sleep 1
+          ./bin/calipso_crawl web_ada.txt tests/start_list.txt 10 > crawl_ada.txt
+          python3 reference/crawl.py web_python.txt tests/start_list.txt 10 > crawl_python.txt
+          cat crawl_ada.txt
+          cat web_ada.txt.finds.txt
+          echo "What the site was asked for:"
+          cat site_server.log
+          sed -e 's/_python/_ada/g' crawl_python.txt > crawl_python_as_ada.txt
+          diff crawl_ada.txt crawl_python_as_ada.txt
+          diff web_ada.txt.finds.txt web_python.txt.finds.txt
+
   reference:
     name: Python reference
     runs-on: ubuntu-latest

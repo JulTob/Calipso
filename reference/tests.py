@@ -21,13 +21,18 @@ from calipso_ref import counting_neurons
 from calipso_ref import counting_oracles
 from calipso_ref import criteria
 from calipso_ref import distributions
+from calipso_ref import fetchers
 from calipso_ref import fragment_counts
 from calipso_ref import neuron_kinds
+from calipso_ref import pages
 from calipso_ref import random_sources
 from calipso_ref import repairing
+from calipso_ref import robots
 from calipso_ref import sources
 from calipso_ref import templates
 from calipso_ref import texts
+from calipso_ref import web_addresses
+from calipso_ref import web_sources
 
 CORPUS_TEXT = (
     "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
@@ -37,6 +42,9 @@ TEST_LONGEST = 5
 SAVED_BRAIN = "brain_test_saved.txt"
 PYTHON_BRAIN = "tests/data/brain_from_python.txt"
 SAMPLE_FILE = "data/sample_es.txt"
+TEST_SITE = "http://test.site"
+SITE_FOLDER = "tests/site"
+PAGE_WORK_FILE = "page_test_work.tmp"
 #-- The tests are run from the top folder of the project.
 TOLERANCE = 1.0e-9
 
@@ -479,6 +487,126 @@ def Test_Sources(
     Check(fixture, "file source: the first piece is the start of the file", first_matches)
 
 
+def Test_Web_Addresses(
+        fixture: Fixture
+        ) -> None:
+    base = "http://test.site/sub/c.html?x=1"
+    Check(fixture, "a link one folder up", web_addresses.Resolved(base, "../a.html") == "http://test.site/a.html")
+    Check(fixture, "a link from the top of the site", web_addresses.Resolved(base, "/index.html") == "http://test.site/index.html")
+    Check(fixture, "the part after # is dropped", web_addresses.Resolved(base, "d.html#top") == "http://test.site/sub/d.html")
+    Check(fixture, "a link to the same page leads nowhere", web_addresses.Resolved(base, "#top") == "")
+    Check(fixture, "a mail link cannot be followed", web_addresses.Resolved(base, "mailto:me@test.site") == "")
+    Check(fixture, "a full address gets its final slash", web_addresses.Resolved(base, "http://other.org") == "http://other.org/")
+    Check(fixture, "a link that only changes the question", web_addresses.Resolved(base, "?page=2") == "http://test.site/sub/c.html?page=2")
+    Check(fixture, "stay-here and go-up parts are worked out", web_addresses.Resolved(base, "./e/../f.html") == "http://test.site/sub/f.html")
+    Check(fixture, "going up too far stops at the top", web_addresses.Resolved(base, "../../..") == "http://test.site/")
+    Check(fixture, "a link with a space is dropped", web_addresses.Resolved(base, "a b.html") == "")
+    Check(fixture, "the host of an address", web_addresses.Host_Of("https://test.site:8080/a/b") == "test.site:8080")
+    Check(fixture, "by name: no ending may be a page", web_addresses.Kind_By_Name("http://test.site/wiki/Sea") == web_addresses.PAGE)
+    Check(fixture, "by name: a picture, even in capitals", web_addresses.Kind_By_Name("http://test.site/a.PNG?x=1.html") == web_addresses.PICTURE)
+    Check(fixture, "by name: a film", web_addresses.Kind_By_Name("http://test.site/clip.mp4") == web_addresses.VIDEO)
+    Check(fixture, "by name: program code is writing", web_addresses.Kind_By_Name("http://test.site/tool.py") == web_addresses.WRITING)
+    Check(fixture, "by label: a page", web_addresses.Kind_By_Label("Text/HTML; charset=utf-8") == web_addresses.PAGE)
+    Check(fixture, "by label: a drawing written as text is writing", web_addresses.Kind_By_Label("image/svg+xml") == web_addresses.WRITING)
+    Check(fixture, "by label: unknown bytes are other", web_addresses.Kind_By_Label("application/octet-stream") == web_addresses.OTHER)
+    Check(fixture, "the sense of program code is its ending", web_addresses.Sense_Of("http://test.site/tool.py", web_addresses.WRITING) == "py")
+    Check(fixture, "the sense of a page is page", web_addresses.Sense_Of("http://test.site/a.html", web_addresses.PAGE) == "page")
+
+
+PAGE_MARKUP = (
+    "<html><head><title>Test &amp; page</title><style>p {color: red}</style>"
+    "<script>var a = '<p>not text</p>';</script></head><body><!-- a <b>comment</b> -->"
+    "<h1>Hello   world</h1><p>First <a href=\"a.html?x=1&amp;y=2\">link</a> and "
+    "<A HREF='b.html'>another</A>&nbsp;one &#233; &bogus; AT&T.</p>"
+    "<img alt=\"x\" src=\"pic.png\"><p>Second<br>third <video src=clip.mp4 controls></video> end</p>"
+    "<svg><circle/></svg>tail <a>no link</a> <a title=\"href=x\" href = c.html >c</a>"
+    )
+
+
+def Test_Pages(
+        fixture: Fixture
+        ) -> None:
+    content = pages.Read(PAGE_MARKUP)
+    Check(fixture, "the page is taken apart into 10 blocks", len(content.blocks) == 10)
+    Check(fixture, "the title is the first paragraph", content.blocks[0].kind == pages.WORDS and content.blocks[0].text == "Test & page")
+    Check(fixture, "runs of spaces count as one", content.blocks[1].text == "Hello world")
+    Check(fixture, "letters written by name or number are read", content.blocks[2].text == "First link and another one " + chr(233) + " &bogus; AT&T.")
+    Check(fixture, "a picture keeps its place and its address", content.blocks[3].kind == pages.PICTURE and content.blocks[3].text == "pic.png")
+    Check(fixture, "a line break starts a new paragraph", content.blocks[4].text == "Second" and content.blocks[5].text == "third")
+    Check(fixture, "a film keeps its place and its address", content.blocks[6].kind == pages.VIDEO and content.blocks[6].text == "clip.mp4")
+    Check(fixture, "a drawing inside the page keeps its place", content.blocks[8].kind == pages.DRAWING)
+    Check(fixture, "the last paragraph", content.blocks[9].text == "tail no link c")
+    Check(fixture, "three links, as written", len(content.links) == 3 and content.links[0] == "a.html?x=1&y=2" and content.links[1] == "b.html" and content.links[2] == "c.html")
+    Check(fixture, "the words of the page, one paragraph per line", len(pages.Text_Of(content)) == 99)
+
+
+RULES_TEXT = (
+    "# rules for the test\n"
+    "User-agent: otherbot\n"
+    "Disallow: /\n"
+    "\n"
+    "User-agent: *\n"
+    "Disallow: /private/\n"
+    "Allow: /private/open/\n"
+    "Disallow: /*.pdf$\n"
+    "Disallow: /search?*q=\n"
+    "Crawl-delay: 5\n"
+    "Disallow:\n"
+    )
+
+
+def Test_Robots(
+        fixture: Fixture
+        ) -> None:
+    rules = robots.Parsed(RULES_TEXT, "Calipso")
+    Check(fixture, "the top of the site is allowed", robots.Allows(rules, "/"))
+    Check(fixture, "a forbidden folder", not robots.Allows(rules, "/private/x"))
+    Check(fixture, "the longest rule that fits decides", robots.Allows(rules, "/private/open/x"))
+    Check(fixture, "a rule with * and $: ends in .pdf", not robots.Allows(rules, "/a/b.pdf"))
+    Check(fixture, "a rule with $ does not fit a longer path", robots.Allows(rules, "/a/b.pdfx"))
+    Check(fixture, "a rule with * in the middle", not robots.Allows(rules, "/search?a=1&q=2"))
+    Check(fixture, "the same rule, when the end is missing", robots.Allows(rules, "/search?a=1"))
+    Check(fixture, "the site asks for 5 seconds between requests", robots.Delay_Of(rules) == 5.0)
+    named = robots.Parsed(RULES_TEXT + "User-agent: calipso\nDisallow: /only-us/\n", "Calipso")
+    Check(fixture, "rules that name us replace the rules for everybody", robots.Allows(named, "/private/x") and not robots.Allows(named, "/only-us/x"))
+    Check(fixture, "no rules at all: everything is allowed", robots.Allows(robots.Allow_Everything(), "/x"))
+    Check(fixture, "rules that could not be read: nothing is allowed", not robots.Allows(robots.Allow_Nothing(), "/x"))
+
+
+def Test_Web_Sources(
+        fixture: Fixture
+        ) -> None:
+    letters = alphabets.Common_Letters()
+    Check(fixture, "the common alphabet has 144 symbols", alphabets.Size(letters) == 144)
+    settings = web_sources.Settings()
+    settings.pause_seconds = 0.0
+    source = web_sources.Web_Source()
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/index.html")
+    count = 0
+    first_text = ""
+    while True:
+        piece, found = source.Next_Piece()
+        if not found:
+            break
+        count = count + 1
+        if count == 1:
+            first_text = texts.Decoded(piece, letters)
+    os.remove(PAGE_WORK_FILE)
+    tally = source.tally
+    Check(fixture, "the site gives 17 pieces of 64 letters", count == 17)
+    Check(fixture, "the first piece starts with the title", first_text.startswith("The little test site\nThe little test site\nThis site is small"))
+    Check(fixture, "5 pages asked for, 4 read, 1113 letters", tally.asked == 5 and tally.read == 4 and tally.letters == 1113)
+    Check(fixture, "the private page is refused by the site's rules", tally.refused == 1)
+    Check(fixture, "the file with no ending is asked for, and is not text", tally.not_text == 1 and len(source.finds[web_addresses.OTHER]) == 1)
+    Check(fixture, "nothing failed", tally.failed == 0)
+    Check(fixture, "files that are not pages are filed by kind, never asked for",
+          len(source.finds[web_addresses.WRITING]) == 2 and len(source.finds[web_addresses.PICTURE]) == 1
+          and len(source.finds[web_addresses.VIDEO]) == 1 and len(source.finds[web_addresses.SOUND]) == 1)
+    Check(fixture, "a page linked again is not listed again: it gets mentions", web_sources.Mentions_Of(source, TEST_SITE + "/index.html") == 4)
+    Check(fixture, "the other site was never listed", web_sources.Mentions_Of(source, "http://elsewhere.example/") == 0)
+
+
 def Main() -> None:
     fixture = Fixture()
     groups = [
@@ -496,6 +624,10 @@ def Main() -> None:
         ("Brains", Test_Brains),
         ("Criteria", Test_Criteria),
         ("Sources", Test_Sources),
+        ("Web addresses", Test_Web_Addresses),
+        ("Pages", Test_Pages),
+        ("Site rules", Test_Robots),
+        ("Web source", Test_Web_Sources),
         ]
     for title, group in groups:
         print(title)

@@ -68,6 +68,23 @@ package body Calipso.Texts is
         For_Each_Character (File_Name, Note_Character'Access);
         end Learn_Alphabet;
 
+    function Whole_Text (
+            File_Name : in String
+            ) return Wide_Text is
+        Gathered : Wide_Text;
+
+        procedure Keep_Character (
+                Char : in Wide_Wide_Character
+                ) is
+            begin
+            Ada.Strings.Wide_Wide_Unbounded.Append (Gathered, Char);
+            end Keep_Character;
+
+        begin
+        For_Each_Character (File_Name, Keep_Character'Access);
+        return Gathered;
+        end Whole_Text;
+
     function Read_Symbols (
             File_Name : in String;
             Letters   : in Alphabets.Alphabet
