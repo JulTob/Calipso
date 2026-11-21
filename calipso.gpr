@@ -1,0 +1,36 @@
+--  GPRbuild project for Calipso.
+--
+--  Build:      gprbuild -p -P calipso.gpr      (-p creates the obj and bin folders)
+--  Run:        ./bin/calipso_tests
+--              ./bin/calipso_demo data/sample_es.txt "TEMPLATE" SEED
+--              ./bin/calipso_exam CORPUS
+--              ./bin/calipso_train CORPUS
+
+project Calipso is
+
+    for Source_Dirs use ("src", "apps", "tests");
+    for Object_Dir use "obj";
+    for Exec_Dir use "bin";
+    for Main use ("calipso_demo.adb", "calipso_exam.adb", "calipso_train.adb", "calipso_tests.adb");
+
+    package Compiler is
+        for Default_Switches ("Ada") use (
+            "-gnat2012",
+            "-gnata",
+            "-gnatwa",
+            "-g",
+            "-O2"
+            );
+        --  -gnat2012 : Ada 2012 (contracts, "for ... of" loops).
+        --  -gnata    : contracts (Pre, Post) are checked at run time.
+        --  -gnatwa   : warnings enabled.
+        --  No -gnatW8 on purpose: text crosses the borders as UTF-8 bytes
+        --  and is converted by hand in Calipso.Console and Calipso.Texts.
+    end Compiler;
+
+    package Binder is
+        for Default_Switches ("Ada") use ("-Es");
+        --  -Es : if an exception is raised, show where it came from.
+    end Binder;
+
+end Calipso;

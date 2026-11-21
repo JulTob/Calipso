@@ -1,0 +1,69 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ada:
+    name: Ada (GNAT + GPRbuild)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install GNAT and GPRbuild
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnat gprbuild
+
+      - name: Build
+        run: gprbuild -p -P calipso.gpr
+
+      - name: Tests
+        run: ./bin/calipso_tests
+
+      - name: The demo in Ada and the Python reference must write the same
+        run: |
+          ./bin/calipso_demo data/sample_es.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3 > demo_ada.txt
+          python3 reference/demo.py data/sample_es.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3 > demo_python.txt
+          cat demo_ada.txt
+          diff demo_ada.txt demo_python.txt
+
+      - name: The blind-spot exam in Ada and in Python must give the same figures
+        run: |
+          ./bin/calipso_exam data/sample_es.txt 20 > exam_ada.txt
+          python3 reference/exam.py data/sample_es.txt 20 > exam_python.txt
+          cat exam_ada.txt
+          diff exam_ada.txt exam_python.txt
+
+      - name: Training with blind spots in Ada and in Python must give the same figures
+        run: |
+          time ./bin/calipso_train data/sample_es.txt 1500 > train_ada.txt
+          time python3 reference/train.py data/sample_es.txt 1500 > train_python.txt
+          cat train_ada.txt
+          diff train_ada.txt train_python.txt
+
+  reference:
+    name: Python reference
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Reference tests
+        run: python3 reference/tests.py
+
+  alire:
+    name: Alire (check alire.toml)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: alire-project/setup-alire@v2
+      - name: Build with Alire
+        run: alr -n build
+      - name: Tests
+        run: ./bin/calipso_tests

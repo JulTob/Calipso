@@ -1,9 +1,9 @@
-name = "colapso"
-description = "Generar texto rellenando huecos, mirando a los dos lados"
+name = "calipso"
+description = "Generate text by filling holes, looking at both sides"
 version = "0.1.0-dev"
 
 authors = ["Julio Toboso"]
 maintainers-logins = ["JulTob"]
 
-project-files = ["colapso.gpr"]
-executables = ["colapso_demo", "colapso_ciegos", "colapso_votos", "colapso_tests"]
+project-files = ["calipso.gpr"]
+executables = ["calipso_demo", "calipso_exam", "calipso_train", "calipso_tests"]
