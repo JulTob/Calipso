@@ -1,0 +1,35 @@
+--  Proyecto GPRbuild de Colapso.
+--
+--  Compilar:   gprbuild -p -P colapso.gpr      (-p crea las carpetas obj y bin)
+--  Ejecutar:   ./bin/colapso_tests
+--              ./bin/colapso_demo data/muestra.txt "PLANTILLA" SEMILLA
+--              ./bin/colapso_ciegos CORPUS
+
+project Colapso is
+
+    for Source_Dirs use ("src", "apps", "tests");
+    for Object_Dir use "obj";
+    for Exec_Dir use "bin";
+    for Main use ("colapso_demo.adb", "colapso_ciegos.adb", "colapso_tests.adb");
+
+    package Compiler is
+        for Default_Switches ("Ada") use (
+            "-gnat2012",
+            "-gnata",
+            "-gnatwa",
+            "-g",
+            "-O2"
+            );
+        --  -gnat2012 : Ada 2012 (contratos, bucles "for ... of").
+        --  -gnata    : los contratos (Pre, Post) se comprueban al ejecutar.
+        --  -gnatwa   : avisos activados.
+        --  Sin -gnatW8 a propósito: el texto cruza las fronteras como bytes UTF-8
+        --  y se convierte a mano en Colapso.Console y Colapso.Texts.
+    end Compiler;
+
+    package Binder is
+        for Default_Switches ("Ada") use ("-Es");
+        --  -Es : si salta una excepción, se muestra por dónde pasó.
+    end Binder;
+
+end Colapso;

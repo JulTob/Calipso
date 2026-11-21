@@ -1,0 +1,57 @@
+name: Compilar y probar
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ada:
+    name: Ada (GNAT + GPRbuild)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar GNAT y GPRbuild
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnat gprbuild
+
+      - name: Compilar
+        run: gprbuild -p -P colapso.gpr
+
+      - name: Pruebas
+        run: ./bin/colapso_tests
+
+      - name: Demo
+        run: ./bin/colapso_demo data/muestra.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3
+
+      - name: La demo en Ada y la referencia en Python deben escribir lo mismo
+        run: |
+          ./bin/colapso_demo data/muestra.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3 > salida_ada.txt
+          python3 referencia/demo.py data/muestra.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3 > salida_python.txt
+          diff salida_ada.txt salida_python.txt
+
+  referencia:
+    name: Referencia en Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pruebas de la referencia
+        run: python3 referencia/pruebas.py
+
+  alire:
+    name: Alire (comprobar alire.toml)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: alire-project/setup-alire@v2
+      - name: Compilar con Alire
+        run: alr -n build
+      - name: Pruebas
+        run: ./bin/colapso_tests
