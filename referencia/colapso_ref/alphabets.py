@@ -23,7 +23,7 @@ def Size(
 def Is_Full(
         letters: Alphabet
         ) -> bool:
-    return letters.size >= MAX_SYMBOLS
+    return letters.size == MAX_SYMBOLS
 
 
 def Contains(

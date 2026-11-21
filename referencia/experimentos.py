@@ -14,8 +14,9 @@ para examinar (texto que el modelo no ha visto nunca).
 
 import sys
 
+import ciegos
+
 from colapso_ref import alphabets
-from colapso_ref import blind_spots
 from colapso_ref import canvases
 from colapso_ref import collapsing
 from colapso_ref import counting_oracles
@@ -189,31 +190,14 @@ def Experiment_Blind_Spots(
         lab: Laboratory,
         trials: int
         ) -> None:
+    #-- El mismo experimento que referencia/ciegos.py y apps/colapso_ciegos.adb.
     print()
     print("E2. Puntos ciegos al azar: % de letras tapadas que se recuperan")
     print("    (trozos de 300 letras; se elige siempre la letra más probable)")
-    orders = [
-        (collapsing.MOST_CERTAIN_FIRST, "menos dudas primero"),
-        (collapsing.LEFT_TO_RIGHT, "izquierda a derecha"),
-        (collapsing.AT_RANDOM, "orden al azar      "),
-        ]
-    rate_cases = [(0.15, 15), (0.30, 30), (0.50, 50), (0.70, 70)]
-    for rate, percent in rate_cases:
-        for order, name in orders:
-            hidden = 0
-            recovered = 0
-            for trial in range(0, trials):
-                dice = random_sources.Seeded(202 + trial)
-                #-- Misma semilla por ensayo: todos los órdenes reciben el mismo trozo y los mismos huecos.
-                start = Random_Start(lab, dice, 300)
-                original = templates.From_Text(lab.exam, start, 300)
-                board = canvases.Copy(original)
-                blind_spots.Hide_At_Random(board, rate, dice)
-                collapsing.Collapse_All(board, lab.model, dice, order, collapsing.ALWAYS_MOST_LIKELY)
-                score = blind_spots.Scored(board, original)
-                hidden = hidden + score.hidden
-                recovered = recovered + score.recovered
-            print(f"  tapado {percent} %  {name}: {Percent(recovered, hidden)} %   ({hidden} letras)")
+    for rate, percent in ciegos.RATE_CASES:
+        for order in ciegos.ORDERS:
+            total = ciegos.Measure(lab.model, lab.exam, rate, order, trials)
+            print(f"  tapado {percent} %  {ciegos.Order_Name(order)}: {Percent(total.recovered, total.hidden)} %   ({total.hidden} letras)")
 
 
 #-- E3 ----------------------------------------------------------------------

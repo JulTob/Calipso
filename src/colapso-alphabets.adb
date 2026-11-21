@@ -11,7 +11,7 @@ package body Colapso.Alphabets is
             Letters : in Alphabet
             ) return Boolean is
         begin
-        return Letters.Used >= Symbol'Last;
+        return Letters.Used = Symbol'Last;
         end Is_Full;
 
     function Contains (

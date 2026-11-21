@@ -36,7 +36,7 @@ en esta etapa; el porqué y el siguiente paso están en [docs/DISENO.md](docs/DI
 | Parte | Estado |
 |---|---|
 | Referencia en Python (`referencia/`) | Ejecutada. Pruebas en verde. Experimentos hechos. |
-| Librería en Ada (`src/`) | Escrita como espejo exacto de la referencia. Se compila y se prueba en GitHub Actions. |
+| Librería en Ada (`src/`) | Compila con GNAT 14. Pruebas en verde en GitHub Actions. Con la misma semilla escribe exactamente lo mismo que la referencia. |
 | Corpus | Incluida una muestra pequeña en español (`data/muestra.txt`, 9 KB). Falta probar con Wikipedia. |
 
 La referencia en Python existe por dos motivos: probar la idea deprisa, y
@@ -60,8 +60,12 @@ La referencia, sin instalar nada (solo Python 3):
 ```sh
 python3 referencia/pruebas.py
 python3 referencia/demo.py data/muestra.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3
+python3 referencia/ciegos.py data/muestra.txt
 python3 referencia/experimentos.py data/muestra.txt
 ```
+
+`demo.py` y `ciegos.py` son espejos de los dos programas en Ada: mismos
+argumentos, misma salida. GitHub Actions compara las dos salidas en cada subida.
 
 ### Cómo se escribe una plantilla
 
