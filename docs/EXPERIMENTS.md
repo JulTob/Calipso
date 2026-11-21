@@ -1,18 +1,20 @@
 # Experiments
 
-Five questions about the collapse idea, with figures.
+Nine questions about the collapse idea and the machinery around it, with figures.
 
 ## How they were run
 
 - **Programs:** `python3 reference/experiments.py CORPUS 60` for E1 to E4
-  (60 trials per case) and `python3 reference/train.py CORPUS` for E5.
+  (60 trials per case) and `python3 reference/brain.py study BRAIN CORPUS 2000
+  RECIPE` for E5 to E7 (the Ada program `calipso_brain` takes the same
+  arguments and writes the same). E8 and E9 are Ada only, run on GitHub.
   Seeds are fixed: every run can be repeated and gives the same output.
 - **Main corpus:** a public-domain book in English, 557,909 letters
   (Newton's *Opticks*; it was the long text at hand). It is not in the
   repository. The model learns from the first 90 % and is examined on the
   last 10 %, which it has never seen.
 - **Small corpus:** `data/sample_es.txt`, 9,144 letters in Spanish.
-- **Brain:** the counting one, with a window of 7 letters, except in E5.
+- **Brain:** the counting one, with a window of 7 letters, in E1 to E4.
 - Full outputs in [`results/`](results/).
 
 Cautions for reading the figures:
@@ -140,46 +142,127 @@ reopen + grow:   lose it in a short time. Wh[ich,] that if many contiguous
 That last point is the limit that matters. "Extend until it makes sense"
 works today as "extend until it joins".
 
-## E5. Does training with random blind spots work?
+## E5. Does training with random blind spots work, and which neurons learn most?
 
-The voting brain starts with every number at 0 and learns only by playing the
-blind-spot game: 4,000 lessons, each one a piece of 64 letters with a random
-amount hidden. Then all brains take the same exam: letters are hidden at
-random and the brain is asked about each hidden letter, without filling in
-the others.
+Every brain starts knowing nothing and studies 2,000 lessons. A lesson is a
+piece of 64 letters with a random amount hidden: the brain is tested on every
+hidden letter and then corrected (read, calculate, write). Then all take the
+same exam on text they have never seen.
 
-| Hidden | Brain | Right | Mean surprise |
+Hidden letters right, and mean surprise in nats (lower is better):
+
+| Recipe | hidden 15 % | hidden 50 % | hidden 85 % |
 |---|---|---|---|
-| 15 % | counting | **72.0 %** | **1.156 nats** |
-| 15 % | votes, untrained | 0.0 % | 4.511 nats |
-| 15 % | votes, trained | 44.2 % | 2.230 nats |
-| 50 % | counting | **41.9 %** | **2.132 nats** |
-| 50 % | votes, untrained | 0.0 % | 4.511 nats |
-| 50 % | votes, trained | 33.2 % | 2.490 nats |
-| 85 % | counting | 24.1 % | 2.828 nats |
-| 85 % | votes, untrained | 0.0 % | 4.511 nats |
-| 85 % | votes, trained | 24.1 % | 2.829 nats |
+| `bias+presence` | 12.4 % · 3.497 | 15.0 % · 3.209 | 16.8 % · 3.128 |
+| `bias+harmonic` | 28.8 % · 3.518 | 24.1 % · 3.381 | 17.7 % · 3.212 |
+| `bias+decay` | 40.2 % · 2.305 | 30.3 % · 2.587 | 22.5 % · 2.947 |
+| `bias+position` | 43.1 % · 2.147 | 34.0 % · 2.458 | 24.1 % · 2.856 |
+| `bias+position+decay` | 43.4 % · 2.139 | 34.1 % · 2.425 | 24.4 % · 2.843 |
+| `bias+position+harmonic+decay` | 37.8 % · 2.613 | 31.0 % · 2.704 | 22.6 % · 2.934 |
+| `counting` | 68.3 % · 1.338 | 41.1 % · 2.198 | 24.2 % · 2.832 |
+| `counting+bias+position` | 67.5 % · 1.333 | 42.7 % · 2.142 | 24.7 % · 2.796 |
 
-(378, 1,264 and 2,131 hidden letters. All brains get the same pieces and the
-same holes.)
+What it shows:
 
-**Reading.**
+- **Training by blind spots works.** A brain that knows nothing bets the same
+  on every letter (0 % right). After 2,000 lessons the best learning recipe
+  gets 43 % of the hidden letters right when few are hidden.
+- **Position matters.** `presence` knows which letters are around but not
+  where, and learns very little. `position` knows exactly where, and learns
+  most. `decay` (Laplace) is close behind with far fewer numbers, because
+  "near counts more than far" is most of what position has to say.
+- **The waves did not help.** `harmonic` (Fourier) learns less than `decay`,
+  and adding it to `position+decay` made the brain worse. Its high surprise
+  at 15 % hidden says its corrections overshoot: many waves speak at once for
+  the same neighbour. It needs a gentler step, or waves used differently.
+- **Counting is still far ahead** when most of the text is known, because it
+  remembers whole fragments, where a learning neuron holds only single votes
+  of one neighbour for one letter.
+- **The mix is the best of all** when half or more is hidden
+  (`counting+bias+position`, 42.7 % and 24.7 %): there the counting windows
+  break on the holes, and the position votes see through them.
 
-- **Training by blind spots works.** The untrained brain bets the same on
-  every letter (4.511 nats is the surprise of a blind guess among 91
-  symbols). After training its surprise is about half.
-- **One layer is not enough.** With few holes, counting is far ahead (72 %
-  against 44 %). Each neighbour votes on its own, so this brain cannot use
-  *combinations* of neighbours; counting can, within its 7 letters.
-- **When almost everything is hidden, they tie.** At 85 % hidden there are few
-  neighbours next to each hole. Counting falls back to very short windows;
-  the voting brain looks through the holes, and that makes up the difference.
+## E6. Which correction rule?
 
-On the Spanish sample: trained votes 41.5 % against 59.8 % for counting at
-15 % hidden, and 23.1 % against 23.2 % at 85 %. The same pattern.
+Two ways for a neuron to correct a vote, 1,500 lessons each:
 
-Exploratory runs, not in the table: more lessons (6,000), a wider reach (24)
-and a larger step did not improve the trained brain. The limit is its shape.
+- **plain**: each vote moves against the error, in proportion to how loudly it
+  spoke;
+- **shared**: the same, but one correction is shared out among all the votes
+  that spoke, by their energy.
+
+| Recipe | Rule | hidden 15 % | hidden 50 % | hidden 85 % |
+|---|---|---|---|---|
+| `bias+position` | plain | 40.2 % | 32.0 % | 24.1 % |
+| `bias+position` | shared | 37.3 % | 31.2 % | 23.5 % |
+| `bias+decay` | plain | 37.8 % | 29.0 % | 21.3 % |
+| `bias+decay` | shared | 29.4 % | 25.2 % | 13.8 % |
+
+The plain rule learns more in every case, and the shared one was unstable on
+`decay`. The library uses the plain rule.
+
+## E7. How big must the fixed-size memory be?
+
+One counting neuron, 2,000 lessons. With exact memory it needs 132,431
+counters and gets 68.3 % right at 15 % hidden. The `memory` neuron has a
+fixed number of counters instead.
+
+| Counters | Shared blindly | With a check number |
+|---|---|---|
+| 65,536 (half of what is needed) | 10.1 % | 62.2 % |
+| 262,144 | 15.6 % | 66.4 % |
+| 1,048,576 | 27.2 % | 67.2 % |
+| 4,194,304 | 41.3 % | 68.5 % |
+| 16,777,216 | 57.9 % | not run |
+| exact | 68.3 % | 68.3 % |
+
+The first version failed even with a hundred times more counters than
+fragments. The cause was not fragments crowding each other out: it was that a
+fragment **never seen** read the count of whoever owned its counter. The
+counting brain asks about many fragments that do not exist (one per candidate
+letter), so a few false answers were enough to spoil its opinion.
+
+With a check number in each counter an unseen fragment reads 0, and memory
+degrades gently: with half the counters it needs, the brain loses 6 points.
+
+## E8. File or compiled in: how long does a brain take to get into memory?
+
+Ada, on GitHub. A `counting+bias+position` brain after 20 lessons: 102,501
+numbers, a 2.3 MB `.brn` file of 102,527 lines.
+
+| Way in | Time |
+|---|---|
+| Read from the file (`Brains.Load`) | 33.3 ms |
+| Taken from the constants compiled into the program (`Brains.Thaw`) | 3.5 ms |
+
+Building the test program, the library and the brain file together took 15
+seconds. Both brains gave identical opinions.
+
+So compiling a brain in makes the start ten times faster, and saves three
+hundredths of a second. Once in memory there is no difference.
+
+## E9. The scraper and the panel, on a small site
+
+A site of four pages, one forbidden page and some files that are not pages
+(`tests/site`), served by `calipso_serve`. All in Ada, on GitHub.
+
+- **The scraper** asked for `robots.txt` first, then five addresses, one a
+  second. It read four pages (1,113 letters), was refused the forbidden page
+  by the site's rules, and dropped one file that looked like a page by name
+  but was not by label. It filed two writings, one picture, one film and one
+  sound without asking for any of them.
+- **The panel**, after studying three of the pages (13 lessons), was asked to
+  rebuild a sentence of the fourth:
+
+| Test | Result |
+|---|---|
+| The whole sentence hidden | It wrote "Go back to the next. Start from one to the front door or to the next." 5 of 69 letters right. |
+| Half of its letters hidden | 17 of 31 hidden letters right (54.8 %). |
+
+With the whole sentence hidden the brain writes fluent pieces of what the site
+sounds like, and nothing tells it which sentence was there. With half the
+letters to hold on to, it recovers more than half of the rest. The first is
+writing, the second is recall.
 
 ## Summary
 
@@ -189,5 +272,7 @@ and a larger step did not improve the trained brain. The limit is its shape.
 | Collapsing the most certain first | Yes, in every case measured. |
 | Giving the ending and landing on it | Yes, at the level of letters and words. |
 | Free length | Yes when the hole is short. It grows the minimum. |
-| Training with random blind spots | Yes, it learns. A single layer of independent votes stays below counting. |
+| Training with random blind spots | Yes, it learns, and every lesson doubles as a test. Single votes stay well below counting; a mix of both is the best brain so far. |
+| Fourier and Laplace as ways of looking | Laplace (fading with distance) comes within 3 or 4 points of exact positions with a third of the numbers. Fourier (waves) did not help as built. |
+| Memory of a fixed size | Yes, once each counter knows whose it is. |
 | Text with meaning | **Not yet.** It is the limit of these brains, not of the engine. |

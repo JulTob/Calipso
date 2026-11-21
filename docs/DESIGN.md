@@ -143,69 +143,244 @@ With this brain, training is just counting. The blind-spot game
 (`Calipso.Blind_Spots`) is used to **measure**: hide letters of real text,
 ask about them, count hits.
 
-## 4. The second brain: votes that learn
+## 4. Brains made of neurons
 
-`Calipso.Voting_Oracles` is the first brain whose numbers are *learned* with
-the blind-spot game, which was the original training proposal.
-
-- Every known neighbour **votes**. A vote is a row of points, for or against
-  each candidate letter. There is a different row for each pair (distance to
-  the hole, letter found there). "I have a `q` right on your left" gives many
-  points to `u`.
-- The opinion is the sum of the votes of all known neighbours, turned into
-  probabilities. Holes simply do not vote, so this brain can look *through*
-  holes, up to 12 cells away on each side.
-- At the start every point is 0. Training repeats one small lesson: hide a
-  letter, give an opinion, look at the real letter, and move the points of
-  every neighbour that voted so that the real letter would surprise less.
-- Each lesson hides a different amount of text, from almost nothing to almost
-  everything.
-
-The correction for each lesson is simple enough to write by hand:
+A **neuron** (`Calipso.Neurons`) is one way of looking at the surroundings of
+a hole. It does not answer with a letter. It gives **points** for or against
+each candidate letter. Points simply add up, so neurons of different kinds can
+sit in the same brain:
 
 ```
-error(letter)  = probability bet on that letter, minus 1 for the real letter
-each voter's points for that letter go down by  step × error(letter)
+points of the brain = sum over its neurons of (weight x points of the neuron)
 ```
 
-It fulfils the same `Oracle` contract, so the engine, the repair and the exam
-work with it unchanged.
+A **brain** (`Calipso.Brains`) is a list of neurons with their weights. It
+turns the total points into probabilities, so it fulfils the Oracle contract:
+the engine, the repair and the exam use it without knowing what is inside.
 
-### What it showed
+A brain is described by a **recipe**: neuron names joined by `+`, for example
+`counting+bias+position`. The catalogue is `Calipso.Neuron_Kinds`; a new kind
+of neuron is a new package plus one line there.
 
-Training with blind spots **works**: in a few seconds the brain goes from
-knowing nothing to a real opinion. But this brain is clearly worse than
-counting when the neighbours are known, and only matches it when almost
-everything is hidden (figures in [EXPERIMENTS.md](EXPERIMENTS.md), E5).
+| Name | What it looks at | Where the idea comes from |
+|---|---|---|
+| `bias` | Nothing. One number per letter: how common it is. | |
+| `position` | Which letter is at each exact distance. "What is 3 cells to my left?" | One curve per distance. |
+| `presence` | Which letters are around, wherever they are. It ignores position altogether. | The flat curve of the next one, alone. |
+| `harmonic` | The neighbours weighed by waves over distance: a flat one, then cosines and sines with 1, 2, 3... cycles across the window. | A **Fourier** series. |
+| `decay` | The neighbours weighed by curves that fade with distance, at several speeds. Fast fading sees only the next letter; slow fading sees far, blurred. | A **Laplace** transform. |
+| `counting` | The table of fragment counts of section 3, as one neuron. | |
+| `memory` | The same table with a fixed number of counters. | |
 
-The reason is its shape, not the training. Each neighbour votes **on its
-own**. The brain cannot learn that `t` on the left *together with* `e` on the
-right means `h`: it can only add up what `t` says and what `e` says. Counting
-does see such combinations, within its 7 letters.
+`position`, `presence`, `harmonic` and `decay` are one package
+(`Calipso.Basis_Neurons`): they differ only in the set of curves over distance
+(the "basis") by which a neighbour's vote is weighed.
 
-So the next brain needs votes that depend on combinations of neighbours.
-That is what stacked layers, and attention in particular, provide.
+### Read, calculate, write
 
-## 5. Decisions taken, and why
+A brain's memory works in three steps on every hidden letter
+(`Brains.Learn_Cell`):
+
+1. **read** the surroundings of the hole,
+2. **calculate** an opinion, and see how much the real letter surprises,
+3. **write**: every neuron corrects its numbers a little, against the error.
+
+The score is taken at step 2, before anything is corrected. So every lesson is
+also an honest test: `Brains.Study` returns the test score of the lessons it
+has just learned from. Nothing is written when a brain is used to generate.
+
+Neurons learn in two ways. `bias` and the basis neurons learn from the error
+(step 3). `counting` and `memory` learn from text: after a lesson they read
+the piece and count its fragments.
+
+## 5. Which hole collapses next
+
+`Calipso.Criteria` makes the order of collapse a module of its own. A
+criterion looks at one hole and says how **ready** it is, from 0 to 1. The
+engine (`Collapsing.Collapse_By`) always collapses the readiest hole.
+
+| Criterion | Ready means |
+|---|---|
+| `Certainty` | The opinion has little doubt: 1 minus doubt, as a fraction of the most doubt possible. 1 = one letter is certain, 0 = all letters equally possible. This is the "collapse index". |
+| `Agreement` | The neurons of the brain, each asked alone, place their bets on the same letters. |
+| `Leftmost` | It is further left. This reproduces writing left to right, and is here to compare against. |
+| `Mixed` | A weighted mean of other criteria. |
+
+Neither `Certainty` nor `Agreement` looks at where the hole is. The order
+comes from the content, not from the position.
+
+## 6. Where text comes from
+
+A **source** (`Calipso.Sources`) hands out text one piece at a time. The brain
+never needs the whole text at once, so a source can be far bigger than memory.
+
+| Source | What it reads |
+|---|---|
+| `Calipso.Memory_Sources` | Pieces taken at random from a text held in memory. |
+| `Calipso.File_Sources` | A file from start to end, never loaded whole. |
+| `Calipso.Web_Sources` | Pages from the web: the scraper. |
+
+### The scraper
+
+`Calipso.Web_Sources` keeps a list of addresses to visit. For each one:
+
+1. it asks the site's rules (`Calipso.Robots`, the site's `robots.txt`)
+   whether the address may be fetched;
+2. it waits, if the last request was too recent;
+3. it fetches the address (`Calipso.Fetchers`) and checks what really arrived;
+4. it takes the words of the page (`Calipso.Pages`) to hand out in pieces;
+5. it takes the links: new ones go to the end of the list.
+
+The next page is fetched only when the words of this one have been handed out.
+So the brain studies a whole page before the next request: **studying is the
+pause** between requests, on top of a minimum of one second (more if the site
+asks for more).
+
+Two guards keep it from reading what is not text:
+
+- **before asking**, by the name: an address ending in `.png` or `.mp4` is
+  never requested;
+- **after asking**, by the label the server sends: if it says the file is not
+  a page, the content is dropped.
+
+What is not a page is not thrown away. Its address is filed under its kind
+(writing, picture, video, sound, document), ready for the brain of that kind.
+
+An address is never listed twice. When it is linked again it gains a
+**mention**, a count of how many links point to it.
+
+Redirections are not followed blindly: the new address is treated like any
+other link, so it passes the same checks.
+
+Fetching is a contract with two implementations: `Calipso.Curl_Fetchers` runs
+the program `curl` (already on macOS and most Linux systems), because secure
+connections (`https`) need an encryption library that standard Ada does not
+carry; `Calipso.Folder_Fetchers` pretends a folder is a site, for tests.
+
+**Limits to know.** `robots.txt` says what may be *fetched*. It says nothing
+about what the text may be *used* for; that stays a decision of the person
+running the program. Pages that build their text with scripts look empty to
+this reader. For Wikipedia, the published dumps are the considerate way to get
+a lot of text; the scraper is for looking at a few pages.
+
+## 7. Brain files
+
+A saved brain is a `.brn` file (`Calipso.Records`). It holds everything the
+brain needs: its alphabet, its recipe, its numbers and how many lessons it has
+studied in its whole life. Load it, study more, save it: it carries on. Copy
+it to another computer: it carries on there.
+
+Everything is written, in order, onto a **tape**: a list of short words and a
+list of numbers. The file that keeps a tape is two things at once:
+
+- **data**: Calipso reads it line by line when a brain is loaded
+  (`Brains.Load`). No compiler is involved, and the brain can go on learning
+  and be saved again;
+- **Ada**: the same file is the specification of a package with two constants,
+  `Words` and `Numbers`. It can be compiled into a program, and the brain is
+  then inside the program itself (`Brains.Thaw`).
+
+```ada
+with Calipso.Records;
+
+package Page_Brain is
+
+    Words : constant Calipso.Records.Word_List := (
+          "calipso-tape    "
+        , "calipso-brain   "
+        , "bias            "
+        , "end             "
+        );
+
+    Numbers : constant Calipso.Records.Number_List := (
+          1.0
+        , 1.0
+        , 144.0
+        ...
+```
+
+The project file tells the compiler which file holds the package, so the file
+keeps its `.brn` name (see `tests/frozen/frozen.gpr`):
+
+```
+package Naming is
+    for Spec ("Page_Brain") use "page.brn";
+end Naming;
+```
+
+**Which way in to use.** Once a brain is in memory it works at the same speed
+however it got there. The difference is only the moment of starting. Measured
+on a brain of 102,501 numbers (a 2.3 MB file): 33 ms from the file, 3.5 ms
+from inside the program. A compiled brain cannot change: use the file while a
+brain is learning, and compile it in to ship a finished one. A very large
+brain is a very large source file, and the compiler is slow on it.
+
+### Bounded memory
+
+The `memory` neuron keeps its counts in a fixed number of counters, however
+much text it reads. Each fragment has one counter where it may live, chosen
+by a scrambled number worked out from its letters.
+
+The first version shared counters blindly, and measuring it showed a fault: a
+fragment *never seen* was read as whichever fragment owned its counter, and
+the brain fell from 68 % to 27 % of hidden letters right (E7). Each counter
+now also keeps a **check number** saying whose it is, so an unseen fragment
+reads 0. When a newcomer finds its counter taken, it knocks one off the
+owner's count, and takes the counter when that count reaches 0. What is seen
+often stays; what was seen once, long ago, makes room.
+
+## 8. The panel
+
+`calipso_panel` is a supervised browser for training. It starts a small web
+server (`Calipso.Web_Servers`) that answers only this same computer, and the
+panel is a page in the browser you already have.
+
+It shows a page the way the robot reads it (`Calipso.Panels`):
+
+- the page as plain pieces: paragraphs, and the places of pictures and films;
+- the site's `robots.txt`, as it was just read, and what it says about this
+  address. If the rules forbid it, nothing is fetched and there is no training;
+- every link, with the kind of thing it points to;
+- **Train on this page**: the brain of that kind of file studies it and saves
+  itself;
+- **hide**: a paragraph becomes a hole and the brain builds something in its
+  place from the text around it, shown next to what was really there. This is
+  a writing test. **hide half** hides half of its letters by chance; with
+  something to hold on to, this is a recovery test, and its score means more.
+
+There is one brain per kind of file, kept in the brain folder: `page.brn` for
+web pages, and one per ending for other files that are text inside (`txt.brn`,
+`py.brn`, `svg.brn`...), because each is its own language.
+
+Pictures, films and sounds have no brain yet. Their files are compressed, and
+compressed bytes look like noise: they would have to be unpacked into pixels
+or sound samples first.
+
+## 9. Decisions taken, and why
 
 | Decision | Alternative rejected | Reason |
 |---|---|---|
 | One centred window that grows | Multiply the opinion of a forward model by that of a backward model | Measured with the same smoothing: 0.74 nats of mean surprise against 0.95 (window of 7). And it is a single mechanism. |
 | Brake by variety | A constant tuned by hand | Measured: 0.665 nats and 85.5 % hits, against 0.659 and 83.4 % for the best constant I tried. Practically the same, with nothing to tune. |
-| Collapse the most certain hole first | Left to right, or random order | Measured: it recovers more letters at every level of hiding. |
+| Collapse the most certain hole first | Left to right, or random order | Measured: it recovers more letters at every level of hiding (E2). |
 | Tension = surprise above a threshold | Mean surprise | The mean rewards filling with easy, repetitive text. The threshold does not: once everything fits, it stops. |
 | Measure tension on nearby given letters too | Only on the model's letters | A bad seam shows on both sides. Without this the engine did not see broken words. |
-| Our own random generator (`Random_Sources`) | The standard library generator | This way Ada and Python give the same numbers and any result can be repeated. |
+| Our own random generator (`Random_Sources`) | The standard library generator | This way Ada and the reference give the same numbers and any result can be repeated. |
 | Letters as the unit | Words or pieces of words | The simplest thing that works. It can be changed without touching the engine: the alphabet is a table. |
-| The learner shares each correction equally among its voters | A fixed step per voter | A design argument, not a measurement: with a fixed step, a hole with many known neighbours would get many corrections at once and overshoot. Sharing keeps the total correction the same however many neighbours are known. |
+| Each vote is corrected in proportion to how loudly it spoke | Share one correction among all the votes that spoke, by their energy | Measured (E6): the plain rule learns more with the same lessons, and the shared one was unstable on the `decay` neuron. |
+| A check number in every bounded counter | Counters shared blindly | Measured (E7): 67 % against 27 % of hidden letters right with the same counters. |
+| Brain files are data first, and also Ada | Weights built into the program | A program cannot rewrite its own code, so a brain that learns must be data. The same file compiles when a finished brain is to be shipped. |
+| The panel is a page in the usual browser | A window toolkit | Buttons, forms and layout come for free, on any system, and the server is a few hundred lines of Ada. |
+| `curl` for fetching | A secure-connection library bound into Ada | One small program that is already installed, behind a contract. A fetcher in pure Ada can replace it without touching the scraper. |
 
 The "measured" figures in the first two rows come from exploratory runs on the
 English text of 558,000 letters; the others come from
 [EXPERIMENTS.md](EXPERIMENTS.md).
 
-## 6. What these brains cannot do
+## 10. What these brains cannot do
 
-Both see only letters near the hole, and neither understands them. So:
+All of them see only letters near the hole (12 on each side at most), and none
+understands them. So:
 
 - Words come out well formed and join up with the given ending.
 - **There is no global meaning.** They cannot write a paragraph that
@@ -214,40 +389,56 @@ Both see only letters near the hole, and neither understands them. So:
 - Tension only detects local faults. An absurd sentence made of correct words
   has tension 0.
 - Free length works as "grow until it joins", not "grow until it makes sense".
+- The neurons that learn from errors are still far behind plain counting (E5).
+  Their numbers are single votes of one neighbour for one letter; they cannot
+  say "this letter, *given those two together*".
 
 None of this is a defect of the engine. It is the limit of the brains. For
-global meaning an oracle is needed that combines what it sees over a long
+global meaning a neuron is needed that combines what it sees over a long
 distance.
 
-## 7. Proposed next stage
+## 11. What comes next
 
-**Automatic derivatives in Ada**, then **attention**.
+- **Neurons that combine.** A neuron where every cell *consults* the others
+  (attention), so that the answer depends on combinations of what they hold.
+  The corrections for such a neuron are best worked out automatically, with a
+  small algebra of "values that remember how they were computed".
+- **Fuzzy collapse.** Today a cell is either a hole or a letter. A cell that
+  keeps a whole opinion, sharpened step by step, is a second collapse policy
+  that the criteria already leave room for.
+- **More senses.** One canvas per kind of content, with neurons that look
+  across canvases, so that text can condition a drawing and the reverse.
+- **Using the mentions.** The scraper counts how often each page is linked.
+  That count could decide which pages are read first, or read twice.
+- **Measuring the criteria.** `Agreement` and `Mixed` work and are tested, but
+  they have not been compared with `Certainty` on a large text yet.
 
-- The voting brain's correction was written by hand. With more than one layer
-  that stops being practical: a small algebra of "values that remember how
-  they were computed" gives the corrections automatically.
-- With that, a brain where every cell *consults* the others (attention) and
-  the answer depends on combinations of what they hold.
-- The contract, the engine, the repair and the exam stay as they are.
+## 12. How the Ada is checked
 
-Training speed matters from here on. In GitHub Actions the Ada program that
-counts, trains 1,500 lessons and runs the exams takes under half a second; the
-Python reference takes about five seconds for the same work.
+There is no Ada compiler where the code is written, so it is checked in two
+ways.
 
-## 8. How the Ada is checked
+**A mirror for the numeric core.** `reference/calipso_ref/` has one Python
+module per core package, with the same functions and the same steps in the
+same order (even the order of the additions). `tests/calipso_tests.adb` and
+`reference/tests.py` run the same tests on the same tiny corpus, and the
+expected numbers in the Ada tests come from the mirror. It is a checking tool:
+nothing in `src/` or `apps/` needs it, and the library builds and runs with
+`gprbuild` alone.
 
-`reference/calipso_ref/` is a mirror: one module per package, same functions,
-same steps in the same order (even the order of the additions).
-`tests/calipso_tests.adb` and `reference/tests.py` run the same tests on the
-same tiny corpus. The expected numbers in the Ada tests come from Python.
+**GitHub Actions for everything.** Every push is compiled with all warnings on
+and contracts checked at run time. Then it runs the tests, runs each program
+in Ada and in the mirror and compares the output with `diff`, checks that each
+language reads the brain files the other saved, compiles a saved brain into a
+program, crawls a small site served by `calipso_serve`, and drives the panel
+through its pages.
 
 The tests have two levels. Properties (no holes left, given letters do not
 change, tension does not rise) must always hold. Letter-by-letter comparisons
-with the reference only leave a note, because different rounding between
+with the mirror only leave a note, because different rounding between
 machines can change a draw without anything being wrong.
 
-GitHub Actions also runs the three programs in Ada and in Python and compares
-their output with `diff`.
+The web server and the panel exist only in Ada.
 
 ## Reading
 
