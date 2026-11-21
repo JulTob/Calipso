@@ -1,0 +1,56 @@
+Corpus: 9144 letters. Learns from 8229, examines with 915.
+Alphabet: 51 symbols. Widest window: 7 letters.
+
+E1. Guess ONE hidden letter in text never seen before
+  left side only : right  55.5 %   mean surprise 1.759 nats
+  right side only: right  52.8 %   mean surprise 1.814 nats
+  both sides     : right  74.7 %   mean surprise 0.971 nats
+
+E2. Random blind spots: % of hidden letters recovered
+    (pieces of 300 letters; the most likely letter is always chosen)
+  hidden 15 %  most certain first:  68.5 %   (2632 letters)
+  hidden 15 %  left to right     :  65.0 %   (2632 letters)
+  hidden 15 %  random order      :  65.0 %   (2632 letters)
+  hidden 30 %  most certain first:  62.5 %   (5320 letters)
+  hidden 30 %  left to right     :  54.3 %   (5320 letters)
+  hidden 30 %  random order      :  53.5 %   (5320 letters)
+  hidden 50 %  most certain first:  49.0 %   (8902 letters)
+  hidden 50 %  left to right     :  41.2 %   (8902 letters)
+  hidden 50 %  random order      :  37.7 %   (8902 letters)
+  hidden 70 %  most certain first:  32.9 %   (12654 letters)
+  hidden 70 %  left to right     :  25.9 %   (12654 letters)
+  hidden 70 %  random order      :  23.2 %   (12654 letters)
+
+E3. Bridge: fill a hole between two real pieces (no repair)
+  hole 10  most certain first: valid words  67.1 %   worst surprise (median)  4.57 nats
+      a pantalla durante mucho tie[mpococes i]deas menos y los ojos se sec
+  hole 10  left to right     : valid words  62.9 %   worst surprise (median)  4.83 nats
+      a pantalla durante mucho tie[nen veinti]deas menos y los ojos se sec
+  hole 20  most certain first: valid words  75.5 %   worst surprise (median)  5.60 nats
+      ras una pantalla durante muc[ho texto. Se lebesca] menos y los ojos se secan, 
+  hole 20  left to right     : valid words  76.3 %   worst surprise (median)  6.02 nats
+      ras una pantalla durante muc[ho texto. El plájar,] menos y los ojos se secan, 
+  hole 40  most certain first: valid words  84.4 %   worst surprise (median)  5.47 nats
+      r. Cuando miras una pantalla[s perros desdeman jabón durante viajarse] los ojos se secan, y por es
+  hole 40  left to right     : valid words  83.0 %   worst surprise (median)  5.47 nats
+      r. Cuando miras una pantalla[s perros antes durante hacen más fuertel] los ojos se secan, y por es
+
+E4. Hole too short: 30 letters are removed and only K cells are left
+  K=1  no repair        : no tension 16/60   valid words  14.0 %   mean length  1.0
+       fuerte daña el oído poco a [p]arar, y por eso debes bajar 
+  K=1  reopen           : no tension 25/60   valid words   8.5 %   mean length  1.0
+       fuerte daña el oído poco a [p]arar, y por eso debes bajar 
+  K=1  reopen + grow    : no tension 30/60   valid words  28.8 %   mean length  2.1
+       fuerte daña el oído poco a [p]arar, y por eso debes bajar 
+  K=3  no repair        : no tension 14/60   valid words  35.4 %   mean length  3.0
+       fuerte daña el oído poco a [pol]arar, y por eso debes bajar 
+  K=3  reopen           : no tension 29/60   valid words  39.4 %   mean length  3.0
+       fuerte daña el oído poco a [por]arar, y por eso debes bajar 
+  K=3  reopen + grow    : no tension 30/60   valid words  43.0 %   mean length  4.1
+       fuerte daña el oído poco a [por]arar, y por eso debes bajar 
+  K=8  no repair        : no tension 19/60   valid words  61.8 %   mean length  8.0
+       fuerte daña el oído poco a [poco sep]arar, y por eso debes bajar 
+  K=8  reopen           : no tension 30/60   valid words  66.4 %   mean length  8.0
+       fuerte daña el oído poco a [poco sep]arar, y por eso debes bajar 
+  K=8  reopen + grow    : no tension 30/60   valid words  67.7 %   mean length  8.8
+       fuerte daña el oído poco a [poco sep]arar, y por eso debes bajar 

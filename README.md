@@ -2,163 +2,170 @@
 
 Wave Function Collapse AI models.
 
-**Calipso** es el proyecto. Su primera pieza es **Colapso**: una librería en Ada
-para generar texto *rellenando huecos*, mirando el contexto a los dos lados,
-en vez de escribir letra a letra de izquierda a derecha.
+Calipso is an Ada library that generates text by *filling holes*, looking at
+the context on both sides, instead of writing letter by letter from left to
+right.
 
-## La idea, en corto
+## The idea, in short
 
-Un generador normal escribe así: lee lo anterior, apuesta la siguiente letra,
-y repite. Nunca sabe a dónde va.
+A normal generator writes like this: read what came before, bet on the next
+letter, repeat. It never knows where it is going.
 
-Colapso trabaja sobre un **lienzo**: una fila de celdas. Algunas ya tienen
-letra (por ejemplo, el final que tú quieres). El resto son **huecos**.
-Cada hueco puede ser todavía cualquier letra. El motor repite tres pasos:
+Calipso works on a **canvas**: a row of cells. Some already have a letter
+(for example, the ending you want). The rest are **holes**. Each hole can
+still be any letter. The engine repeats three steps:
 
-1. **Observar.** Buscar el hueco sobre el que hay menos dudas.
-2. **Colapsar.** Decidir su letra.
-3. **Propagar.** Esa letra cambia lo que se puede esperar de sus vecinas.
+1. **Observe.** Find the hole there is least doubt about.
+2. **Collapse.** Decide its letter.
+3. **Propagate.** That letter changes what can be expected of its neighbours.
 
-Es el mismo bucle del algoritmo *Wave Function Collapse* que se usa para
-generar mapas, aplicado a texto.
+It is the same loop as the *Wave Function Collapse* algorithm used to generate
+maps, applied to text.
 
 ```
-Plantilla:  \nEl azúcar [40] y por eso debes lavarte los dientes.\n
-Resultado:  \nEl azúcar [de los una hasta las encías se inflaman,] y por eso debes lavarte los dientes.\n
+Template:  \nEl azúcar [40] y por eso debes lavarte los dientes.\n
+Result:    \nEl azúcar [de los una hasta las encías se inflaman,] y por eso debes lavarte los dientes.\n
 ```
 
-El texto **aterriza** en el final dado. Todavía no tiene sentido global:
-el primer "cerebro" solo sabe contar trocitos de 7 letras. Eso es lo esperado
-en esta etapa; el porqué y el siguiente paso están en [docs/DISENO.md](docs/DISENO.md).
+The text **lands** on the given ending. It has no global meaning yet: the
+brains built so far only see a few letters around each hole. That is expected
+at this stage; the why and the next step are in [docs/DESIGN.md](docs/DESIGN.md).
 
-## Estado del proyecto
+## Project status
 
-| Parte | Estado |
+| Part | Status |
 |---|---|
-| Referencia en Python (`referencia/`) | Ejecutada. Pruebas en verde. Experimentos hechos. |
-| Librería en Ada (`src/`) | Compila con GNAT 14. Pruebas en verde en GitHub Actions. Con la misma semilla escribe exactamente lo mismo que la referencia. |
-| Corpus | Incluida una muestra pequeña en español (`data/muestra.txt`, 9 KB). Falta probar con Wikipedia. |
+| Ada library (`src/`) | Builds with GNAT 14, no warnings. Tests pass on GitHub Actions. |
+| Python reference (`reference/`) | A mirror of the Ada code, module per package. With the same seed both write exactly the same output; GitHub Actions compares them on every push. |
+| Corpus | A small Spanish sample is included (`data/sample_es.txt`, 9 KB). Not yet tried on Wikipedia. |
 
-La referencia en Python existe por dos motivos: probar la idea deprisa, y
-comprobar el Ada. Con la misma semilla, los dos deben dar lo mismo.
+The Python reference exists for two reasons: to test ideas quickly, and to
+check the Ada.
 
-## Compilar y ejecutar
+## Build and run
 
-Con GNAT y GPRbuild:
+With GNAT and GPRbuild:
 
 ```sh
-gprbuild -p -P colapso.gpr
-./bin/colapso_tests
-./bin/colapso_demo data/muestra.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3
-./bin/colapso_ciegos data/muestra.txt
+gprbuild -p -P calipso.gpr
+./bin/calipso_tests
+./bin/calipso_demo data/sample_es.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3
+./bin/calipso_exam data/sample_es.txt
+./bin/calipso_train data/sample_es.txt
 ```
 
-Con Alire: `alr build` y después los mismos programas de `bin/`.
+With Alire: `alr build`, then the same programs in `bin/`.
 
-La referencia, sin instalar nada (solo Python 3):
+| Program | What it does |
+|---|---|
+| `calipso_demo` | Collapses a template and shows the canvas filling up. |
+| `calipso_exam` | Hides letters at random and counts how many are recovered, with three collapse orders. |
+| `calipso_train` | Trains the brain that learns, and examines it next to the brain that counts. |
+| `calipso_tests` | The test suite. |
+
+The reference needs only Python 3:
 
 ```sh
-python3 referencia/pruebas.py
-python3 referencia/demo.py data/muestra.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3
-python3 referencia/ciegos.py data/muestra.txt
-python3 referencia/experimentos.py data/muestra.txt
+python3 reference/tests.py
+python3 reference/demo.py data/sample_es.txt "\nEl azúcar [40] y por eso debes lavarte los dientes.\n" 3
+python3 reference/exam.py data/sample_es.txt
+python3 reference/train.py data/sample_es.txt
+python3 reference/experiments.py data/sample_es.txt
 ```
 
-`demo.py` y `ciegos.py` son espejos de los dos programas en Ada: mismos
-argumentos, misma salida. GitHub Actions compara las dos salidas en cada subida.
+### How to write a template
 
-### Cómo se escribe una plantilla
-
-| Escribes | Significa |
+| You write | It means |
 |---|---|
-| `_` | un hueco de una celda |
-| `[25]` | un hueco de 25 celdas |
-| `[...]` | un hueco del tamaño por defecto (30) |
-| `\n` | un salto de línea: frontera de párrafo |
-| cualquier otra cosa | letras dadas, que no se tocan |
+| `_` | a hole of one cell |
+| `[25]` | a hole of 25 cells |
+| `[...]` | a hole of the default size (30) |
+| `\n` | a line break: a paragraph boundary |
+| anything else | given letters, which are never touched |
 
-El tamaño del hueco es solo un punto de partida: si el texto no encaja,
-el motor puede **ensanchar** el hueco por su cuenta.
+The size of a hole is only a starting point: if the text does not fit, the
+engine can **widen** the hole on its own.
 
-## Qué se ha medido ya
+## What has been measured
 
-Con un texto en inglés de 558 000 letras (el modelo aprende del 90 % y se
-examina con el 10 % que nunca vio). Detalle en [docs/EXPERIMENTOS.md](docs/EXPERIMENTOS.md).
+On an English text of 558,000 letters (the model learns from 90 % and is
+examined on the 10 % it never saw). Details in
+[docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
 
-| Pregunta | Resultado |
+| Question | Result |
 |---|---|
-| ¿Ayuda mirar a los dos lados? | Adivinar una letra tapada: 63 % mirando solo a la izquierda, **86 %** mirando a los dos lados. |
-| ¿Importa el orden de colapso? | Con el 30 % del texto tapado se recupera el **72 %** empezando por el hueco más seguro, 64 % de izquierda a derecha, 60 % al azar. |
-| ¿Aterriza en el final dado? | Sí. La peor "costura" sorprende entre 3,9 y 5,1 nats; escribiendo de izquierda a derecha, entre 7,3 y 8,8. |
-| ¿Sirve dejar crecer el texto? | Si el hueco es demasiado corto, sí: las palabras válidas pasan del 17,5 % al **65 %**. Si el hueco ya es holgado, no aporta. |
+| Does looking at both sides help? | Guessing one hidden letter: 63 % looking only left, **86 %** looking at both sides. |
+| Does the collapse order matter? | With 30 % of the text hidden, **72 %** is recovered starting from the most certain hole, 64 % left to right, 60 % in random order. |
+| Does it land on the given ending? | Yes. The worst "seam" surprises by 3.9 to 5.1 nats; writing left to right, by 7.3 to 8.8. |
+| Does letting the text grow help? | When the hole is too short, yes: valid words go from 17.5 % to **65 %**. When the hole is already roomy, it adds nothing. |
+| Does training with random blind spots work? | Yes: the brain that learns goes from knowing nothing (4.5 nats of surprise) to 2.2 nats. But with one layer it is still worse than counting. |
 
-## Mapa del proyecto
+## Project map
 
-Cada capa solo conoce a las de abajo.
+Each layer only knows the ones below it.
 
 ```
-apps/  tests/          programas: demo, puntos ciegos, pruebas
-────────────────────────────────────────────────────────────────
-Colapso.Repairing      medir la tensión, reabrir y ensanchar
-Colapso.Collapsing     el motor: observar, colapsar, propagar
-Colapso.Blind_Spots    tapar letras al azar y contar aciertos
-────────────────────────────────────────────────────────────────
-Colapso.Counting_Oracles   un cerebro que solo cuenta
-Colapso.Oracles            el CONTRATO de cualquier cerebro
-────────────────────────────────────────────────────────────────
-Colapso.Templates      lienzo <-> texto con huecos
-Colapso.Canvases       el lienzo: celdas Blank / Given / Guessed
-Colapso.Fragment_Counts    tabla "trocito -> veces visto"
-────────────────────────────────────────────────────────────────
-Colapso.Distributions  álgebra de opiniones:  A + B,  Factor * A
-Colapso.Texts          archivo -> fila de símbolos
-Colapso.Alphabets      tabla letra <-> símbolo
-Colapso.Random_Sources azar repetible (misma semilla, mismo resultado)
-Colapso.Console        frontera con la terminal (UTF-8)
-Colapso                tipos comunes: Symbol
+apps/  tests/              programs: demo, exam, train, tests
+────────────────────────────────────────────────────────────────────
+Calipso.Repairing          measure tension, reopen and widen
+Calipso.Collapsing         the engine: observe, collapse, propagate
+────────────────────────────────────────────────────────────────────
+Calipso.Voting_Oracles     a brain that learns by blind spots
+Calipso.Counting_Oracles   a brain that only counts
+Calipso.Blind_Spots        hide letters at random; the common exam
+Calipso.Oracles            the CONTRACT of any brain
+────────────────────────────────────────────────────────────────────
+Calipso.Templates          canvas <-> text with holes
+Calipso.Canvases           the canvas: Blank / Given / Guessed cells
+Calipso.Fragment_Counts    table "small piece -> times seen"
+────────────────────────────────────────────────────────────────────
+Calipso.Distributions      algebra of opinions:  A + B,  Factor * A
+Calipso.Texts              file -> row of symbols
+Calipso.Alphabets          letter <-> symbol table
+Calipso.Random_Sources     repeatable randomness (same seed, same result)
+Calipso.Console            border with the terminal (UTF-8)
+Calipso                    common types: Symbol
 ```
 
-La pieza clave es `Colapso.Oracles`. El motor no sabe qué cerebro tiene
-debajo: solo le pregunta *"¿qué letra crees que va aquí?"*. Hoy contesta una
-tabla de cuentas. Cuando llegue la red neuronal, el motor no cambia.
+The key piece is `Calipso.Oracles`. The engine does not know which brain is
+underneath: it only asks *"which letter do you think goes here?"*. Two brains
+answer that question today, and the engine is the same for both.
 
-`referencia/colapso_ref/` tiene un módulo por cada paquete, con el mismo
-nombre y las mismas funciones.
+`reference/calipso_ref/` has one module per package, with the same name and
+the same functions.
 
-## Conseguir un corpus más grande
+## Getting a larger corpus
 
-Cualquier archivo de texto en UTF-8 sirve. Para Wikipedia en español hay un
-andamio provisional:
+Any UTF-8 text file works. For Wikipedia there is a temporary scaffold:
 
 ```sh
-python3 herramientas/descargar_wikipedia.py 500 corpus/wikipedia.txt
+python3 tools/download_wikipedia.py es 500 corpus/wikipedia_es.txt
 ```
 
-Aviso: esa herramienta **no se ha podido probar** donde se escribió (no había
-salida a Wikipedia). La carpeta `corpus/` no se sube al repositorio.
+Warning: that tool **could not be tested** where it was written (there was no
+access to Wikipedia). The `corpus/` folder is not uploaded to the repository.
 
-## Estilo del código
+## Code style
 
-- Tabulación en cascada: parámetros con doble sangría; el cierre (`)`, `end`)
-  pertenece al nivel de dentro.
-- Los comentarios explicativos llevan marca (`--#` en Ada, `#--` en Python)
-  y van **después** de lo que explican.
-- Una línea, un paso. Una función, una tarea. Nombres que se explican solos.
-- Contratos (`Pre`, `Post`) en la interfaz de cada paquete; se comprueban al
-  ejecutar (`-gnata`).
-- Identificadores en inglés; comentarios y documentos en español.
-- Fuentes sin `-gnatW8`: dentro del programa el texto es `Wide_Wide_String`;
-  en las fronteras son bytes UTF-8, y se convierte solo en `Colapso.Console`
-  y `Colapso.Texts`.
+- Cascading tabulation: parameters with double indentation; the closing token
+  (`)`, `end`) belongs to the inner level.
+- Explanatory comments carry a pin (`--#` in Ada, `#--` in Python) and go
+  **after** what they explain.
+- One line, one step. One function, one task. Names that explain themselves.
+- Contracts (`Pre`, `Post`) on the interface of each package; they are checked
+  at run time (`-gnata`).
+- Everything in English: identifiers, comments, messages and documents.
+- Sources without `-gnatW8`: inside the program text is `Wide_Wide_String`;
+  at the borders it is UTF-8 bytes, converted only in `Calipso.Console` and
+  `Calipso.Texts`.
 
-## Hoja de ruta
+## Roadmap
 
-1. **Cerebro de conteo** (hecho): toda la tubería funcionando de punta a punta.
-2. **Una capa que aprende**: un cerebro con números que se ajustan jugando a
-   los puntos ciegos (tapar, apostar, destapar, corregir). Mira más lejos que
-   7 letras.
-3. **Álgebra de derivadas automáticas** en Ada, para poder apilar capas.
-4. **Atención**: que cada celda consulte a todas las demás. Aquí es donde
-   debería aparecer el sentido global.
+1. **Counting brain** (done): the whole pipeline working end to end.
+2. **One layer that learns** (done): a brain whose numbers are adjusted by
+   playing the blind-spot game. Training works; one layer is not enough.
+3. **Automatic derivatives** in Ada, so that layers can be stacked.
+4. **Attention**: let every cell consult all the others. This is where global
+   meaning should appear.
 
-Sin licencia todavía: es una decisión tuya.
+No licence yet: that is your decision.

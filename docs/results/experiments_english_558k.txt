@@ -1,0 +1,56 @@
+Corpus: 557909 letters. Learns from 502118, examines with 55791.
+Alphabet: 91 symbols. Widest window: 7 letters.
+
+E1. Guess ONE hidden letter in text never seen before
+  left side only : right  63.2 %   mean surprise 1.530 nats
+  right side only: right  61.8 %   mean surprise 1.547 nats
+  both sides     : right  86.1 %   mean surprise 0.620 nats
+
+E2. Random blind spots: % of hidden letters recovered
+    (pieces of 300 letters; the most likely letter is always chosen)
+  hidden 15 %  most certain first:  81.5 %   (2632 letters)
+  hidden 15 %  left to right     :  77.8 %   (2632 letters)
+  hidden 15 %  random order      :  75.1 %   (2632 letters)
+  hidden 30 %  most certain first:  71.9 %   (5320 letters)
+  hidden 30 %  left to right     :  64.3 %   (5320 letters)
+  hidden 30 %  random order      :  59.5 %   (5320 letters)
+  hidden 50 %  most certain first:  54.5 %   (8902 letters)
+  hidden 50 %  left to right     :  45.2 %   (8902 letters)
+  hidden 50 %  random order      :  40.2 %   (8902 letters)
+  hidden 70 %  most certain first:  32.3 %   (12654 letters)
+  hidden 70 %  left to right     :  24.3 %   (12654 letters)
+  hidden 70 %  random order      :  22.7 %   (12654 letters)
+
+E3. Bridge: fill a hole between two real pieces (no repair)
+  hole 10  most certain first: valid words  84.7 %   worst surprise (median)  3.91 nats
+      e height of 60 or 70 Inches,[ and in be]fore acts with a Force which
+  hole 10  left to right     : valid words  70.1 %   worst surprise (median)  8.78 nats
+      e height of 60 or 70 Inches,[ nor woul ]fore acts with a Force which
+  hole 20  most certain first: valid words  86.5 %   worst surprise (median)  4.23 nats
+       to the height of 60 or 70 I[nches; so that pleft] acts with a Force which wou
+  hole 20  left to right     : valid words  85.0 %   worst surprise (median)  7.90 nats
+       to the height of 60 or 70 I[nches; so that image] acts with a Force which wou
+  hole 40  most certain first: valid words  91.6 %   worst surprise (median)  5.14 nats
+      er suspended to the height o[nes 4 NE will be easily defined. Then wi]th a Force which would keep 
+  hole 40  left to right     : valid words  90.0 %   worst surprise (median)  7.30 nats
+      er suspended to the height o[f their Species white, without, as aften]th a Force which would keep 
+
+E4. Hole too short: 30 letters are removed and only K cells are left
+  K=1  no repair        : no tension 14/60   valid words  17.5 %   mean length  1.0
+       lose it in a short time. Wh[e] that if many contiguous Vor
+  K=1  reopen           : no tension 18/60   valid words  16.3 %   mean length  1.0
+       lose it in a short time. Wh[e] that if many contiguous Vor
+  K=1  reopen + grow    : no tension 47/60   valid words  65.0 %   mean length  3.7
+       lose it in a short time. Wh[ich,] that if many contiguous Vor
+  K=3  no repair        : no tension 21/60   valid words  41.3 %   mean length  3.0
+       lose it in a short time. Wh[er,] that if many contiguous Vor
+  K=3  reopen           : no tension 35/60   valid words  51.6 %   mean length  3.0
+       lose it in a short time. Wh[er,] that if many contiguous Vor
+  K=3  reopen + grow    : no tension 47/60   valid words  66.7 %   mean length  4.5
+       lose it in a short time. Wh[er,] that if many contiguous Vor
+  K=8  no repair        : no tension 25/60   valid words  80.2 %   mean length  8.0
+       lose it in a short time. Wh[ere ther] that if many contiguous Vor
+  K=8  reopen           : no tension 47/60   valid words  84.3 %   mean length  8.0
+       lose it in a short time. Wh[ere ther] that if many contiguous Vor
+  K=8  reopen + grow    : no tension 47/60   valid words  84.4 %   mean length  8.4
+       lose it in a short time. Wh[ere ther] that if many contiguous Vor
