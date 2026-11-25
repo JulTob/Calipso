@@ -13,6 +13,7 @@ with Ada.Command_Line;
 with Ada.Containers;
 with Ada.Directories;
 with Ada.Exceptions;
+with Ada.Strings.Unbounded;
 with Ada.Strings.Wide_Wide_Unbounded;
 
 with Calipso.Alphabets;
@@ -862,6 +863,20 @@ procedure Calipso_Tests is
         if Ada.Directories.Exists (Page_Work_File) then
             Ada.Directories.Delete_File (Page_Work_File);
             end if;
+
+        Options.Stay_Under := Ada.Strings.Unbounded.To_Unbounded_String ("/sub/");
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/index.html");
+        loop
+            Reader.Next_Piece (Piece, Found);
+            exit when not Found;
+            end loop;
+        Ada.Directories.Delete_File (Page_Work_File);
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check (
+            "told to stay under /sub/: only the start page and the page under /sub/ are read",
+            Counts.Asked = 2 and then Counts.Read = 2 and then Counts.Letters = 682
+            );
         end Test_Web_Sources;
 
     begin

@@ -677,6 +677,18 @@ def Test_Web_Sources(
     if os.path.exists(PAGE_WORK_FILE):
         os.remove(PAGE_WORK_FILE)
 
+    settings.stay_under = "/sub/"
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/index.html")
+    while True:
+        piece, found = source.Next_Piece()
+        if not found:
+            break
+    os.remove(PAGE_WORK_FILE)
+    tally = source.tally
+    Check(fixture, "told to stay under /sub/: only the start page and the page under /sub/ are read",
+          tally.asked == 2 and tally.read == 2 and tally.letters == 682)
+
 
 def Main() -> None:
     fixture = Fixture()
