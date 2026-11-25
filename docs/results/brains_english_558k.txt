@@ -1,0 +1,85 @@
+Brain recipes on the English corpus (558 k letters): 2000 lessons of 64 letters each,
+then the same exam for all (40 pieces, hidden 15 / 50 / 85 %). Command, per recipe:
+   python3 reference/brain.py study BRAIN_FILE CORPUS 2000 RECIPE
+The "memory" recipe is not here: see memory_sizes_english_558k.txt.
+
+== bias+position
+Brain: bias+position (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  28.4 %, mean surprise 2.726 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  43.1 %   2.147 nats
+  hidden 50 %:  34.0 %   2.458 nats
+  hidden 85 %:  24.1 %   2.856 nats
+
+== bias+presence
+Brain: bias+presence (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  14.8 %, mean surprise 3.230 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  12.4 %   3.497 nats
+  hidden 50 %:  15.0 %   3.209 nats
+  hidden 85 %:  16.8 %   3.128 nats
+
+== bias+harmonic
+Brain: bias+harmonic (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  17.8 %, mean surprise 3.230 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  28.8 %   3.518 nats
+  hidden 50 %:  24.1 %   3.381 nats
+  hidden 85 %:  17.7 %   3.212 nats
+
+== bias+decay
+Brain: bias+decay (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  24.9 %, mean surprise 2.835 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  40.2 %   2.305 nats
+  hidden 50 %:  30.3 %   2.587 nats
+  hidden 85 %:  22.5 %   2.947 nats
+
+== bias+position+decay
+Brain: bias+position+decay (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  28.5 %, mean surprise 2.705 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  43.4 %   2.139 nats
+  hidden 50 %:  34.1 %   2.425 nats
+  hidden 85 %:  24.4 %   2.843 nats
+
+== bias+position+harmonic+decay
+Brain: bias+position+harmonic+decay (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  25.6 %, mean surprise 2.840 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  37.8 %   2.613 nats
+  hidden 50 %:  31.0 %   2.704 nats
+  hidden 85 %:  22.6 %   2.934 nats
+
+== counting
+Brain: counting (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  34.4 %, mean surprise 2.449 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  68.3 %   1.338 nats
+  hidden 50 %:  41.1 %   2.198 nats
+  hidden 85 %:  24.2 %   2.832 nats
+
+== counting+bias+position
+Brain: counting+bias+position (new)
+Corpus: 557909 letters. Studies from 502118, examines with 55791.
+Studied 2000 lessons. While studying: right  35.7 %, mean surprise 2.389 nats (64867 letters)
+Lessons so far: 2000
+Exam (hidden letters right, mean surprise):
+  hidden 15 %:  67.5 %   1.333 nats
+  hidden 50 %:  42.7 %   2.142 nats
+  hidden 85 %:  24.7 %   2.796 nats
+
