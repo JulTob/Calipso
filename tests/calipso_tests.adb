@@ -20,6 +20,7 @@ with Calipso.Alphabets;
 with Calipso.Basis_Neurons;
 with Calipso.Bias_Neurons;
 with Calipso.Blind_Spots;
+with Calipso.Boxed_Oracles;
 with Calipso.Brains;
 with Calipso.Canvases;
 with Calipso.Collapsing;
@@ -31,20 +32,24 @@ with Calipso.Distributions;
 with Calipso.File_Sources;
 with Calipso.Folder_Fetchers;
 with Calipso.Fragment_Counts;
+with Calipso.Kinds;
 with Calipso.Memory_Sources;
 with Calipso.Neuron_Kinds;
 with Calipso.Neurons;
 with Calipso.Numbers;
 with Calipso.Oracles;
 with Calipso.Pages;
+with Calipso.Pyramids;
 with Calipso.Random_Sources;
 with Calipso.Records;
 with Calipso.Repairing;
 with Calipso.Robots;
 with Calipso.Templates;
 with Calipso.Texts;
+with Calipso.Tokens;
 with Calipso.Web_Addresses;
 with Calipso.Web_Sources;
+with Calipso.Writers;
 
 procedure Calipso_Tests is
 
@@ -52,8 +57,10 @@ procedure Calipso_Tests is
     use type Ada.Containers.Hash_Type;
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
+    use type Kinds.Kind_Family;
     use type Pages.Block_Kind;
     use type Texts.Symbol_Text;
+    use type Tokens.Token_Sort;
     use type Web_Addresses.Content_Kind;
 
     package Wide_Texts renames Ada.Strings.Wide_Wide_Unbounded;
@@ -72,6 +79,7 @@ procedure Calipso_Tests is
     Test_Site    : constant String := "http://test.site";
     Site_Folder  : constant String := "tests/site";
     Page_Work_File : constant String := "page_test_work.tmp";
+    Pyramid_Corpus : constant String := "data/sample_es.txt";
     --# The tests are run from the top folder of the project.
     Tolerance    : constant Long_Float := 1.0E-9;
 
@@ -785,6 +793,170 @@ procedure Calipso_Tests is
         Check ("rules that could not be read: nothing is allowed", not Robots.Allows (Robots.Allow_Nothing, "/x"));
         end Test_Robots;
 
+    function Code_Sum (
+            Text : in Wide_Wide_String
+            ) return Natural is
+        Total : Long_Long_Integer := 0;
+        Place : Long_Long_Integer := 1;
+        begin
+        for Char of Text loop
+            Total := (Total + Place * Wide_Wide_Character'Pos (Char)) mod 1_000_003;
+            Place := Place + 1;
+            end loop;
+        return Natural (Total);
+        end Code_Sum;
+    --# A number that changes if any letter changes or moves: it lets a test check a whole text.
+
+    procedure Test_Tokens is
+        Feed  : constant Wide_Wide_String := Tokens.Break_Text;
+        Found : constant Tokens.Token_List :=
+            Tokens.Split ("Hola, mundo (2024)." & Feed & Feed & "Fin de la  prueba" & Feed & "final.");
+        begin
+        Check ("a text of 14 tokens", Natural (Found.Length) = 14);
+        Check (
+            "words, marks and numbers are told apart",
+            Found.Element (1) = "Hola" and then Found.Element (2) = "," and then Found.Element (5) = "2024"
+            );
+        Check (
+            "a blank line is a break",
+            Found.Element (8) = Tokens.Break_Text and then Tokens.Sort_Of (Found.Element (8)) = Tokens.Break
+            );
+        Check (
+            "a lone end of line is only a blank",
+            Found.Element (12) = "prueba" and then Found.Element (13) = "final"
+            );
+        Check ("an empty text has no tokens", Tokens.Split ("").Is_Empty);
+        end Test_Tokens;
+
+    procedure Test_Kinds is
+        Whole  : constant Wide_Wide_String := Wide_Texts.To_Wide_Wide_String (Texts.Whole_Text (Pyramid_Corpus));
+        Sample : constant Tokens.Token_List := Tokens.Split (Whole);
+        Book   : constant Kinds.Book := Kinds.Built (Sample);
+        Shape  : constant Symbol := Kinds.Kind_Of (Book, "abcdes");
+        Dice   : Random_Sources.Generator := Random_Sources.Seeded (5);
+        First  : Texts.Wide_Text;
+        Second : Texts.Wide_Text;
+        Third  : Texts.Wide_Text;
+        begin
+        Check (
+            "the sample has 1892 tokens and gives 216 kinds",
+            Natural (Sample.Length) = 1_892 and then Kinds.Kind_Count (Book) = 216
+            );
+        Check (
+            "a mark is its own kind",
+            Kinds.Kind_Of (Book, ".") = 2 and then Kinds.Family_Of (Book, 2) = Kinds.Mark_Kind
+            );
+        Check (
+            "a number is known by how many digits it has",
+            Kinds.Kind_Of (Book, "7") = 5 and then Kinds.Kind_Of (Book, "1704") = 8
+            and then Kinds.Kind_Of (Book, "123456") = 8 and then Kinds.Figures_Of (Book, 8) = 4
+            );
+        Check (
+            "a usual word is its own kind",
+            Kinds.Kind_Of (Book, "de") = 12 and then Kinds.Text_Of (Book, 12) = "de"
+            and then Kinds.Family_Of (Book, 12) = Kinds.Word_Kind
+            );
+        Check (
+            "a word never seen still has a kind: its shape",
+            Shape = 154 and then Kinds.Family_Of (Book, Shape) = Kinds.Shape_Kind
+            and then Kinds.Text_Of (Book, Shape) = "es" and then not Kinds.Is_Capital (Book, Shape)
+            );
+        Check (
+            "a capital letter makes another shape",
+            Kinds.Kind_Of (Book, "Zaragoza") = 195 and then Kinds.Is_Capital (Book, 195)
+            );
+        Check ("a mark never seen is unknown", Kinds.Kind_Of (Book, "@") = Unknown);
+        Kinds.Draw_Member (Book, Shape, Dice, First);
+        Kinds.Draw_Member (Book, Shape, Dice, Second);
+        Kinds.Draw_Member (Book, Shape, Dice, Third);
+        Check (
+            "words are drawn from those seen in a shape",
+            Wide_Texts.To_Wide_Wide_String (First) = "lugares"
+            and then Wide_Texts.To_Wide_Wide_String (Second) = "entonces"
+            and then Wide_Texts.To_Wide_Wide_String (Third) = "errores"
+            );
+        end Test_Kinds;
+
+    procedure Test_Boxed_Oracles is
+        Belief  : Distributions.Distribution := Distributions.Zero (4);
+        Allowed : Boxed_Oracles.Permission := (others => False);
+        begin
+        Distributions.Set_Weight (Belief, 1, 0.1);
+        Distributions.Set_Weight (Belief, 2, 0.5);
+        Distributions.Set_Weight (Belief, 3, 0.3);
+        Distributions.Set_Weight (Belief, 4, 0.1);
+        Check (
+            "a rule that allows nothing is not applied",
+            Distributions.Weight_Of (Boxed_Oracles.Kept_Part (Belief, Allowed), 2) = 0.5
+            );
+        Allowed (2) := True;
+        Allowed (3) := True;
+        declare
+            Kept : constant Distributions.Distribution := Boxed_Oracles.Kept_Part (Belief, Allowed);
+            begin
+            Check (
+                "what is not allowed loses all its weight",
+                Distributions.Weight_Of (Kept, 1) = 0.0 and then Distributions.Weight_Of (Kept, 4) = 0.0
+                );
+            Check (
+                "what is allowed keeps its proportions",
+                abs (Distributions.Weight_Of (Kept, 2) - 0.625) < 1.0E-12
+                and then abs (Distributions.Weight_Of (Kept, 3) - 0.375) < 1.0E-12
+                );
+            end;
+        Distributions.Set_Weight (Belief, 2, 0.0);
+        Distributions.Set_Weight (Belief, 3, 0.0);
+        declare
+            Kept : constant Distributions.Distribution := Boxed_Oracles.Kept_Part (Belief, Allowed);
+            begin
+            Check (
+                "when the brain gives no chance to anything allowed, every allowed symbol is as good as another",
+                Distributions.Weight_Of (Kept, 2) = 0.5 and then Distributions.Weight_Of (Kept, 3) = 0.5
+                );
+            end;
+        end Test_Boxed_Oracles;
+
+    procedure Check_Writer (
+            Name     : in String;
+            Author   : in Writers.Writer'Class;
+            Length   : in Natural;
+            Checksum : in Natural
+            ) is
+        Dice   : Random_Sources.Generator := Random_Sources.Seeded (3);
+        Result : Texts.Wide_Text;
+        begin
+        Author.Write (Dice, 10, Result);
+        Check (
+            Name,
+            Wide_Texts.Length (Result) = Length and then Code_Sum (Wide_Texts.To_Wide_Wide_String (Result)) = Checksum
+            );
+        end Check_Writer;
+    --# Any writer, asked for about 10 words with the same dice, must give the text the reference gives.
+
+    procedure Test_Pyramids is
+        Letters : Alphabets.Alphabet;
+        Speller : aliased Counting_Oracles.Counting_Oracle;
+        Plan    : aliased Pyramids.Pyramid;
+        begin
+        Texts.Learn_Alphabet (Pyramid_Corpus, Letters);
+        Counting_Oracles.Train (Speller, Texts.Read_Symbols (Pyramid_Corpus, Letters), Alphabets.Size (Letters));
+        Pyramids.Study (Plan, Wide_Texts.To_Wide_Wide_String (Texts.Whole_Text (Pyramid_Corpus)));
+        Check ("the pyramid decides 216 kinds from the sample", Kinds.Kind_Count (Pyramids.Book_Of (Plan)) = 216);
+        declare
+            Flat   : Writers.Flat_Writer (Speller'Access);
+            Spelt  : Writers.Pyramid_Writer (Plan'Access, Speller'Access);
+            Picked : Writers.Pyramid_Writer (Plan'Access, Speller'Access);
+            begin
+            Flat.Letters := Letters;
+            Spelt.Letters := Letters;
+            Picked.Letters := Letters;
+            Picked.Passing := Pyramids.Pick;
+            Check_Writer ("the flat writer: one level, letters only", Flat, 60, 178_548);
+            Check_Writer ("the pyramid writer that spells: kinds first, then letters in boxes", Spelt, 44, 90_950);
+            Check_Writer ("the pyramid writer that picks: kinds first, then a word seen in that kind", Picked, 44, 94_546);
+            end;
+        end Test_Pyramids;
+
     procedure Test_Web_Sources is
         Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
         Options    : Web_Sources.Settings;
@@ -900,6 +1072,10 @@ procedure Calipso_Tests is
     Run_Group ("Pages", Test_Pages'Access);
     Run_Group ("Site rules", Test_Robots'Access);
     Run_Group ("Web source", Test_Web_Sources'Access);
+    Run_Group ("Tokens", Test_Tokens'Access);
+    Run_Group ("Kinds of token", Test_Kinds'Access);
+    Run_Group ("Boxed oracle", Test_Boxed_Oracles'Access);
+    Run_Group ("Pyramid and writers", Test_Pyramids'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

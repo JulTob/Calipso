@@ -114,6 +114,21 @@ jobs:
           cat small_ada.txt
           sed -e 's/_python/_ada/g' small_python.txt > small_python_as_ada.txt
           diff small_ada.txt small_python_as_ada.txt
+          echo "Starting from one address and told to stay under /sub/:"
+          ./bin/calipso_crawl under_ada.brn http://127.0.0.1:8765/index.html pages=10 under=/sub/ > under_ada.txt
+          python3 reference/crawl.py under_python.brn http://127.0.0.1:8765/index.html pages=10 under=/sub/ > under_python.txt
+          cat under_ada.txt
+          sed -e 's/_python/_ada/g' under_python.txt > under_python_as_ada.txt
+          diff under_ada.txt under_python_as_ada.txt
+
+      - name: Two ways of writing (flat and pyramid) - the same in Ada and in Python
+        run: |
+          for method in flat spell pick; do
+            ./bin/calipso_write data/sample_es.txt method=$method texts=4 words=14 seed=7 > write_ada_$method.txt
+            python3 reference/write.py data/sample_es.txt method=$method texts=4 words=14 seed=7 > write_python_$method.txt
+            cat write_ada_$method.txt
+            diff write_ada_$method.txt write_python_$method.txt
+          done
 
       - name: The panel - look, check the rules, train, hide and rebuild
         run: |

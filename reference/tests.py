@@ -14,6 +14,7 @@ from calipso_ref import alphabets
 from calipso_ref import basis_neurons
 from calipso_ref import bias_neurons
 from calipso_ref import blind_spots
+from calipso_ref import boxed_oracles
 from calipso_ref import brains
 from calipso_ref import canvases
 from calipso_ref import collapsing
@@ -23,8 +24,10 @@ from calipso_ref import criteria
 from calipso_ref import distributions
 from calipso_ref import fetchers
 from calipso_ref import fragment_counts
+from calipso_ref import kinds
 from calipso_ref import neuron_kinds
 from calipso_ref import pages
+from calipso_ref import pyramids
 from calipso_ref import random_sources
 from calipso_ref import records
 from calipso_ref import repairing
@@ -32,8 +35,10 @@ from calipso_ref import robots
 from calipso_ref import sources
 from calipso_ref import templates
 from calipso_ref import texts
+from calipso_ref import tokens
 from calipso_ref import web_addresses
 from calipso_ref import web_sources
+from calipso_ref import writers
 
 CORPUS_TEXT = (
     "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
@@ -49,6 +54,7 @@ SAMPLE_FILE = "data/sample_es.txt"
 TEST_SITE = "http://test.site"
 SITE_FOLDER = "tests/site"
 PAGE_WORK_FILE = "page_test_work.tmp"
+PYRAMID_CORPUS = "data/sample_es.txt"
 #-- The tests are run from the top folder of the project.
 TOLERANCE = 1.0e-9
 
@@ -690,6 +696,92 @@ def Test_Web_Sources(
           tally.asked == 2 and tally.read == 2 and tally.letters == 682)
 
 
+def Code_Sum(text: str) -> int:
+    #-- A number that changes if any letter changes or moves: it lets a test check a whole text.
+    total = 0
+    place = 1
+    for char in text:
+        total = (total + place * ord(char)) % 1000003
+        place = place + 1
+    return total
+
+
+def Test_Tokens(fixture: Fixture) -> None:
+    found = tokens.Split("Hola, mundo (2024).\n\nFin de la  prueba\nfinal.")
+    Check(fixture, "a text of 14 tokens", len(found) == 14)
+    Check(fixture, "words, marks and numbers are told apart", found[0] == "Hola" and found[1] == "," and found[4] == "2024")
+    Check(fixture, "a blank line is a break", found[7] == tokens.BREAK_TEXT and tokens.Sort_Of(found[7]) == tokens.BREAK)
+    Check(fixture, "a lone end of line is only a blank", found[11] == "prueba" and found[12] == "final")
+    Check(fixture, "an empty text has no tokens", len(tokens.Split("")) == 0)
+
+
+def Test_Kinds(fixture: Fixture) -> None:
+    sample = tokens.Split(texts.Whole_Text(PYRAMID_CORPUS))
+    book = kinds.Built(sample)
+    shape = kinds.Kind_Of(book, "abcdes")
+    dice = random_sources.Seeded(5)
+    Check(fixture, "the sample has 1892 tokens and gives 216 kinds", len(sample) == 1892 and kinds.Kind_Count(book) == 216)
+    Check(fixture, "a mark is its own kind", kinds.Kind_Of(book, ".") == 2 and kinds.Family_Of(book, 2) == kinds.MARK_KIND)
+    Check(fixture, "a number is known by how many digits it has",
+          kinds.Kind_Of(book, "7") == 5 and kinds.Kind_Of(book, "1704") == 8
+          and kinds.Kind_Of(book, "123456") == 8 and kinds.Figures_Of(book, 8) == 4)
+    Check(fixture, "a usual word is its own kind",
+          kinds.Kind_Of(book, "de") == 12 and kinds.Text_Of(book, 12) == "de" and kinds.Family_Of(book, 12) == kinds.WORD_KIND)
+    Check(fixture, "a word never seen still has a kind: its shape",
+          shape == 154 and kinds.Family_Of(book, shape) == kinds.SHAPE_KIND
+          and kinds.Text_Of(book, shape) == "es" and not kinds.Is_Capital(book, shape))
+    Check(fixture, "a capital letter makes another shape", kinds.Kind_Of(book, "Zaragoza") == 195 and kinds.Is_Capital(book, 195))
+    Check(fixture, "a mark never seen is unknown", kinds.Kind_Of(book, "@") == UNKNOWN)
+    first = kinds.Draw_Member(book, shape, dice)
+    second = kinds.Draw_Member(book, shape, dice)
+    third = kinds.Draw_Member(book, shape, dice)
+    Check(fixture, "words are drawn from those seen in a shape", first == "lugares" and second == "entonces" and third == "errores")
+
+
+def Test_Boxed_Oracles(fixture: Fixture) -> None:
+    belief = distributions.Zero(4)
+    distributions.Set_Weight(belief, 1, 0.1)
+    distributions.Set_Weight(belief, 2, 0.5)
+    distributions.Set_Weight(belief, 3, 0.3)
+    distributions.Set_Weight(belief, 4, 0.1)
+    allowed = [False] * 256
+    Check(fixture, "a rule that allows nothing is not applied",
+          distributions.Weight_Of(boxed_oracles.Kept_Part(belief, allowed), 2) == 0.5)
+    allowed[2] = True
+    allowed[3] = True
+    kept = boxed_oracles.Kept_Part(belief, allowed)
+    Check(fixture, "what is not allowed loses all its weight",
+          distributions.Weight_Of(kept, 1) == 0.0 and distributions.Weight_Of(kept, 4) == 0.0)
+    Check(fixture, "what is allowed keeps its proportions",
+          abs(distributions.Weight_Of(kept, 2) - 0.625) < 1.0e-12 and abs(distributions.Weight_Of(kept, 3) - 0.375) < 1.0e-12)
+    distributions.Set_Weight(belief, 2, 0.0)
+    distributions.Set_Weight(belief, 3, 0.0)
+    kept = boxed_oracles.Kept_Part(belief, allowed)
+    Check(fixture, "when the brain gives no chance to anything allowed, every allowed symbol is as good as another",
+          distributions.Weight_Of(kept, 2) == 0.5 and distributions.Weight_Of(kept, 3) == 0.5)
+
+
+def Check_Writer(fixture: Fixture, name: str, author: writers.Writer, length: int, checksum: int) -> None:
+    #-- Any writer, asked for about 10 words with the same dice, must give the same text as the Ada.
+    result = author.Write(random_sources.Seeded(3), 10)
+    Check(fixture, name, len(result) == length and Code_Sum(result) == checksum)
+
+
+def Test_Pyramids(fixture: Fixture) -> None:
+    letters = alphabets.Alphabet()
+    texts.Learn_Alphabet(PYRAMID_CORPUS, letters)
+    speller = counting_oracles.Counting_Oracle()
+    counting_oracles.Train(speller, texts.Read_Symbols(PYRAMID_CORPUS, letters), alphabets.Size(letters))
+    plan = pyramids.Pyramid()
+    pyramids.Study(plan, texts.Whole_Text(PYRAMID_CORPUS))
+    Check(fixture, "the pyramid decides 216 kinds from the sample", kinds.Kind_Count(plan.book) == 216)
+    Check_Writer(fixture, "the flat writer: one level, letters only", writers.Flat_Writer(speller, letters), 60, 178548)
+    Check_Writer(fixture, "the pyramid writer that spells: kinds first, then letters in boxes",
+                 writers.Pyramid_Writer(plan, speller, letters, pyramids.SPELL), 44, 90950)
+    Check_Writer(fixture, "the pyramid writer that picks: kinds first, then a word seen in that kind",
+                 writers.Pyramid_Writer(plan, speller, letters, pyramids.PICK), 44, 94546)
+
+
 def Main() -> None:
     fixture = Fixture()
     groups = [
@@ -712,6 +804,10 @@ def Main() -> None:
         ("Pages", Test_Pages),
         ("Site rules", Test_Robots),
         ("Web source", Test_Web_Sources),
+        ("Tokens", Test_Tokens),
+        ("Kinds of token", Test_Kinds),
+        ("Boxed oracle", Test_Boxed_Oracles),
+        ("Pyramid and writers", Test_Pyramids),
         ]
     for title, group in groups:
         print(title)
