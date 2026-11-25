@@ -166,13 +166,34 @@ package body Calipso.Web_Sources is
         end Has_Room;
     --# Is there room in the list where an address of this kind would go?
 
+    procedure Find_Rules (
+            Self  : in out Web_Source;
+            Site  : in     String;
+            Rules :    out Robots.Rule_Set
+            );
+    --# Announced here because filing a link needs it. Its steps are written further down, with the fetching.
+
+    procedure Check_Welcome (
+            Self    : in out Web_Source;
+            Address : in     String;
+            Welcome :    out Boolean
+            ) is
+        Rules : Robots.Rule_Set;
+        begin
+        Find_Rules (Self, Web_Addresses.Site_Of (Address), Rules);
+        Welcome := Robots.Allows (Rules, Web_Addresses.Path_Of (Address));
+        end Check_Welcome;
+    --# Do the rules of its site let our robot ask for this address?
+    --# The first time a site is met, this asks the site for its rules.
+
     procedure Note_Link (
             Self       : in out Web_Source;
             Target     : in     String;
             Was_Listed :    out Boolean
             ) is
-        Kind : Web_Addresses.Content_Kind;
-        Kept : Boolean;
+        Kind    : Web_Addresses.Content_Kind;
+        Kept    : Boolean;
+        Welcome : Boolean;
         begin
         Was_Listed := False;
         if Target = "" then
@@ -197,6 +218,12 @@ package body Calipso.Web_Sources is
             Self.Finds (Kind).Append (Target);
             return;
             --# First guard: by its name it is not a page, so it is never asked for.
+            end if;
+        Check_Welcome (Self, Target, Welcome);
+        if not Welcome then
+            Self.Counts.Refused := Self.Counts.Refused + 1;
+            return;
+            --# The door: an address the rules of its site close never takes a seat in the list.
             end if;
         Put_In_Line (Self, Target);
         Was_Listed := True;
@@ -338,16 +365,37 @@ package body Calipso.Web_Sources is
         Self.Counts.Letters := Self.Counts.Letters + Size;
         end Take_Words;
 
+    function Is_Same_Site (
+            Address : in String;
+            Target  : in String
+            ) return Boolean is
+        begin
+        return Web_Addresses.Host_Of (Target) = Web_Addresses.Host_Of (Address);
+        end Is_Same_Site;
+
+    function Is_Under (
+            Target : in String;
+            Folder : in String
+            ) return Boolean is
+        Path : constant String := Web_Addresses.Path_Of (Target);
+        begin
+        if Path'Length < Folder'Length then
+            return False;
+            end if;
+        return Path (Path'First .. Path'First + Folder'Length - 1) = Folder;
+        end Is_Under;
+    --# Does the path of Target start with Folder? An empty Folder holds every path.
+
     function Stays_Close (
             Self    : in Web_Source;
             Address : in String;
             Target  : in String
             ) return Boolean is
         begin
-        if not Self.Options.Same_Site_Only then
-            return True;
+        if Self.Options.Same_Site_Only and then not Is_Same_Site (Address, Target) then
+            return False;
             end if;
-        return Web_Addresses.Host_Of (Target) = Web_Addresses.Host_Of (Address);
+        return Is_Under (Target, To_String (Self.Options.Stay_Under));
         end Stays_Close;
     --# May a link written in the page Address be followed to Target?
 
@@ -451,6 +499,8 @@ package body Calipso.Web_Sources is
         if not Robots.Allows (Rules, Web_Addresses.Path_Of (Address)) then
             Self.Counts.Refused := Self.Counts.Refused + 1;
             return;
+            --# Second lock. The door already checked this address when it was listed;
+            --# asking again costs nothing (the rules are remembered) and no later change can skip it.
             end if;
         Wait_For_Turn (Self, Duration'Max (Self.Options.Pause, Robots.Delay_Of (Rules)));
         Answer := Asked (Self, Address);

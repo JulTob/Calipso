@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       address:
-        description: "Where to start: a full address, like https://example.org/page"
+        description: "Where to start: a full address (https://example.org/page) or a list kept in the repository (seeds/wikipedia_es.txt)"
         required: true
         type: string
       brain:
@@ -32,6 +32,10 @@ on:
       list:
         description: "Size of the waiting list of links"
         default: "1024"
+        type: string
+      under:
+        description: "Follow only links whose path starts like this, for example /wiki/ (empty = any path)"
+        default: ""
         type: string
       recipe:
         description: "Neurons of a NEW brain (not used if the brain already exists)"
@@ -63,6 +67,7 @@ jobs:
       MINUTES: ${{ inputs.minutes || '1' }}
       PAGES: ${{ inputs.pages || '10' }}
       LIST: ${{ inputs.list || '1024' }}
+      UNDER: ${{ inputs.under }}
       RECIPE: ${{ inputs.recipe || 'counting+bias+position' }}
       SHELF: brains
     steps:
@@ -107,9 +112,8 @@ jobs:
             sleep 1
             START="http://127.0.0.1:8765/index.html"
           fi
-          printf '%s\n' "$START" > start_list.txt
-          ./bin/calipso_crawl "trained/$BRAIN.zmb" start_list.txt \
-            "pages=$PAGES" "minutes=$MINUTES" "list=$LIST" "recipe=$RECIPE" | tee report.txt
+          ./bin/calipso_crawl "trained/$BRAIN.zmb" "$START" \
+            "pages=$PAGES" "minutes=$MINUTES" "list=$LIST" "under=$UNDER" "recipe=$RECIPE" | tee report.txt
           ls -l trained
 
       - name: Report

@@ -667,6 +667,16 @@ def Test_Web_Sources(
     Check(fixture, "a waiting list of 2: the 4 pages are still read", tally.asked == 4 and tally.read == 4)
     Check(fixture, "a waiting list of 2: 3 links are left out", tally.left_out == 3 and web_sources.Waiting_Count(source) == 0)
 
+    settings.list_size = 1024
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/private/secret.html")
+    Check(fixture, "an address the site's rules close is stopped at the door: it never waits in the list",
+          source.tally.refused == 1 and web_sources.Waiting_Count(source) == 0)
+    web_sources.Add_Address(source, TEST_SITE + "/a.html")
+    Check(fixture, "an address the rules allow takes its seat", web_sources.Waiting_Count(source) == 1)
+    if os.path.exists(PAGE_WORK_FILE):
+        os.remove(PAGE_WORK_FILE)
+
 
 def Main() -> None:
     fixture = Fixture()

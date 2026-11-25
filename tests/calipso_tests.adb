@@ -848,6 +848,20 @@ procedure Calipso_Tests is
             "a waiting list of 2: 3 links are left out",
             Counts.Left_Out = 3 and then Web_Sources.Waiting_Count (Reader) = 0
             );
+
+        Options.List_Size := 1_024;
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/private/secret.html");
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check (
+            "an address the site's rules close is stopped at the door: it never waits in the list",
+            Counts.Refused = 1 and then Web_Sources.Waiting_Count (Reader) = 0
+            );
+        Web_Sources.Add_Address (Reader, Test_Site & "/a.html");
+        Check ("an address the rules allow takes its seat", Web_Sources.Waiting_Count (Reader) = 1);
+        if Ada.Directories.Exists (Page_Work_File) then
+            Ada.Directories.Delete_File (Page_Work_File);
+            end if;
         end Test_Web_Sources;
 
     begin

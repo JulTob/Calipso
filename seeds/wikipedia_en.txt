@@ -1,0 +1,6 @@
+# Wikipedia in English. Use with under=/wiki/ so the robot stays among the articles.
+https://en.wikipedia.org/wiki/Science
+https://en.wikipedia.org/wiki/History
+https://en.wikipedia.org/wiki/Literature
+https://en.wikipedia.org/wiki/Geography
+https://en.wikipedia.org/wiki/Mathematics

@@ -1,7 +1,7 @@
 """Mirror of apps/calipso_crawl.adb: a brain that studies pages from the web.
 
 Usage:
-   python3 reference/crawl.py BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]
+   python3 reference/crawl.py BRAIN_FILE START [pages=N] [minutes=N] [list=N] [under=PATH] [recipe=R]
 
 START_LIST is a text file with one address per line (lines that start with #
 are notes). The robot starts there and follows the links it finds, staying on
@@ -72,6 +72,23 @@ def Made_Or_Loaded(
     brains.Add_Recipe(brain, recipe)
     print(f"Brain: {brains.Recipe_Of(brain)} (new)")
     return brain
+
+
+def Is_Address(
+        start: str
+        ) -> bool:
+    #-- "https://site/page" is an address. Anything else is taken as the name of a list file.
+    return "://" in start
+
+
+def Add_Start(
+        source: web_sources.Web_Source,
+        start: str
+        ) -> None:
+    if Is_Address(start):
+        web_sources.Add_Address(source, start)
+    else:
+        Add_Start_List(source, start)
 
 
 def Add_Start_List(
@@ -146,6 +163,7 @@ class Options:
         self.pages = DEFAULT_PAGES
         self.minutes = 0
         self.list_size = DEFAULT_LIST
+        self.under = ""
         self.recipe = DEFAULT_RECIPE
 
 
@@ -160,10 +178,11 @@ def Run_Crawl(
     settings.list_size = options.list_size
     settings.seen_size = options.list_size * SEEN_PER_PLACE
     settings.time_limit = float(options.minutes) * SECONDS_IN_A_MINUTE
+    settings.stay_under = options.under
     work_file = brain_name + ".page"
     source = web_sources.Web_Source()
     web_sources.Open(source, fetchers.Curl_Fetcher(), brain.letters, settings, work_file)
-    Add_Start_List(source, list_name)
+    Add_Start(source, list_name)
     dice = random_sources.Seeded(HIDING_SEED + brain.lessons)
     before = brain.lessons
     result = Studied_And_Saved(brain, brain_name, source, dice)
@@ -205,6 +224,8 @@ def Take_Option(
         options.minutes = Whole_Number(value, 0)
     elif name == "list":
         options.list_size = Whole_Number(value, 1)
+    elif name == "under":
+        options.under = value
     elif name == "recipe":
         options.recipe = value
     else:
@@ -213,7 +234,7 @@ def Take_Option(
 
 def Show_Usage() -> None:
     print("Usage:")
-    print("   calipso_crawl BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]")
+    print("   calipso_crawl BRAIN_FILE START [pages=N] [minutes=N] [list=N] [under=PATH] [recipe=R]")
 
 
 def Main() -> None:

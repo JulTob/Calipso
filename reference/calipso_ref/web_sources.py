@@ -62,6 +62,8 @@ class Settings:
         #-- The least time between two requests.
         self.same_site_only = True
         #-- Follow only links that stay on the site of the page they are in.
+        self.stay_under = ""
+        #-- Follow only links whose path starts like this, for example "/wiki/". Empty = any path.
         self.list_size = 1024
         #-- The most addresses that wait for a visit at once. Also the most
         #-- addresses filed under each kind of thing that is not a page.
@@ -275,8 +277,22 @@ def Note_Link(
         source.finds[kind].append(target)
         return False
         #-- First guard: by its name it is not a page, so it is never asked for.
+    if not Is_Welcome(source, target):
+        source.tally.refused = source.tally.refused + 1
+        return False
+        #-- The door: an address the rules of its site close never takes a seat in the list.
     Put_In_Line(source, target)
     return True
+
+
+def Is_Welcome(
+        source: Web_Source,
+        address: str
+        ) -> bool:
+    #-- Do the rules of its site let our robot ask for this address?
+    #-- The first time a site is met, this asks the site for its rules.
+    rules = Rules_For(source, web_addresses.Site_Of(address))
+    return robots.Allows(rules, web_addresses.Path_Of(address))
 
 
 def Out_Of_Time(
@@ -352,9 +368,24 @@ def Stays_Close(
         target: str
         ) -> bool:
     #-- May a link written in the page `address` be followed to `target`?
-    if not source.settings.same_site_only:
-        return True
+    if source.settings.same_site_only and not Is_Same_Site(address, target):
+        return False
+    return Is_Under(target, source.settings.stay_under)
+
+
+def Is_Same_Site(
+        address: str,
+        target: str
+        ) -> bool:
     return web_addresses.Host_Of(target) == web_addresses.Host_Of(address)
+
+
+def Is_Under(
+        target: str,
+        folder: str
+        ) -> bool:
+    #-- Does the path of `target` start with `folder`? An empty folder holds every path.
+    return web_addresses.Path_Of(target).startswith(folder)
 
 
 def Would_Be_Listed(

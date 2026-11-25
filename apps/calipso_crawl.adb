@@ -1,16 +1,18 @@
 --  A brain that studies pages from the web.
 --
 --  Usage:
---     calipso_crawl BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]
+--     calipso_crawl BRAIN_FILE START [pages=N] [minutes=N] [list=N] [under=PATH] [recipe=R]
 --
---  START_LIST is a text file with one address per line (lines that start with #
---  are notes). The robot starts there and follows the links it finds, staying on
---  the same site, obeying each site's robots.txt, and never asking faster than
---  once a second.
+--  START is one address (https://site/page), or the name of a text file with one
+--  address per line (lines that start with # are notes). The robot starts there
+--  and follows the links it finds, staying on the same site, obeying each site's
+--  robots.txt, and never asking faster than once a second. An address is checked
+--  against the rules of its site BEFORE it takes a seat in the waiting list.
 --
 --     pages=N    read at most N pages (20 if not said)
 --     minutes=N  stop asking for pages after N minutes (no limit if not said)
 --     list=N     the size of the waiting list of links (1024 if not said)
+--     under=PATH follow only links whose path starts with PATH, like /wiki/ (any path if not said)
 --     recipe=R   the neurons of a NEW brain (bias+position if not said)
 --
 --  The brain is loaded from BRAIN_FILE, or made new if the file does not exist,
@@ -58,6 +60,7 @@ procedure Calipso_Crawl is
         Pages     : Natural := Default_Pages;
         Minutes   : Natural := 0;
         List_Size : Positive := Default_List;
+        Under     : Ada.Strings.Unbounded.Unbounded_String := Ada.Strings.Unbounded.Null_Unbounded_String;
         Recipe    : Ada.Strings.Unbounded.Unbounded_String :=
             Ada.Strings.Unbounded.To_Unbounded_String (Default_Recipe);
         end record;
@@ -126,6 +129,26 @@ procedure Calipso_Crawl is
         when Ada.Text_IO.Name_Error | Ada.Text_IO.Use_Error =>
             raise Texts.Reading_Error with "cannot read the list of addresses " & List_Name;
         end Add_Start_List;
+
+    function Is_Address (
+            Start : in String
+            ) return Boolean is
+        begin
+        return Ada.Strings.Fixed.Index (Start, "://") > 0;
+        end Is_Address;
+    --# "https://site/page" is an address. Anything else is taken as the name of a list file.
+
+    procedure Add_Start (
+            Source : in out Web_Sources.Web_Source;
+            Start  : in     String
+            ) is
+        begin
+        if Is_Address (Start) then
+            Web_Sources.Add_Address (Source, Start);
+        else
+            Add_Start_List (Source, Start);
+            end if;
+        end Add_Start;
 
     procedure Show_Tally (
             Source    : in Web_Sources.Web_Source;
@@ -221,8 +244,9 @@ procedure Calipso_Crawl is
         Options.List_Size := Wanted.List_Size;
         Options.Seen_Size := Wanted.List_Size * Seen_Per_Place;
         Options.Time_Limit := Wanted.Minutes * Seconds_In_A_Minute;
+        Options.Stay_Under := Wanted.Under;
         Web_Sources.Open (Source, Fetcher, Brains.Letters_Of (Brain), Options, Work_File);
-        Add_Start_List (Source, List_Name);
+        Add_Start (Source, List_Name);
         Dice := Random_Sources.Seeded (Hiding_Seed + Brains.Lessons_Studied (Brain));
         Before := Brains.Lessons_Studied (Brain);
         Study_And_Save (Brain, Brain_Name, Source, Dice, Result);
@@ -282,6 +306,8 @@ procedure Calipso_Crawl is
                 Wanted.Minutes := Whole_Number (Value, 0);
             elsif Name = "list" then
                 Wanted.List_Size := Whole_Number (Value, 1);
+            elsif Name = "under" then
+                Wanted.Under := Ada.Strings.Unbounded.To_Unbounded_String (Value);
             elsif Name = "recipe" then
                 Wanted.Recipe := Ada.Strings.Unbounded.To_Unbounded_String (Value);
             else
@@ -294,7 +320,7 @@ procedure Calipso_Crawl is
     procedure Show_Usage is
         begin
         Console.Put_Line ("Usage:");
-        Console.Put_Line ("   calipso_crawl BRAIN_FILE START_LIST [pages=N] [minutes=N] [list=N] [recipe=R]");
+        Console.Put_Line ("   calipso_crawl BRAIN_FILE START [pages=N] [minutes=N] [list=N] [under=PATH] [recipe=R]");
         end Show_Usage;
 
     procedure Crawl_Command is
