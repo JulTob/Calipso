@@ -233,7 +233,10 @@ never needs the whole text at once, so a source can be far bigger than memory.
 `Calipso.Web_Sources` keeps a list of addresses to visit. For each one:
 
 1. it asks the site's rules (`Calipso.Robots`, the site's `robots.txt`)
-   whether the address may be fetched;
+   whether the address may be fetched. This is asked twice: **at the door**,
+   before the address takes a seat in the list, and again when its turn comes.
+   The rules of a site are fetched once and remembered, so the second question
+   is free. An address the rules close never waits in the list;
 2. it waits, if the last request was too recent;
 3. it fetches the address (`Calipso.Fetchers`) and checks what really arrived;
 4. it takes the words of the page (`Calipso.Pages`) to hand out in pieces;
@@ -498,6 +501,67 @@ with the mirror only leave a note, because different rounding between
 machines can change a draw without anything being wrong.
 
 The web server and the panel exist only in Ada.
+
+## 13. A second method: the pyramid
+
+The flat method sees one level, letters. A window of seven letters knows how
+words are spelled but not how a sentence is built.
+
+The pyramid adds a level above. Each level has cells of its own:
+
+| Level | A cell holds | Package |
+|---|---|---|
+| kinds | the **kind** of one token | `Calipso.Kinds`, `Calipso.Tokens` |
+| letters | one letter | everything that was already there |
+
+**Tokens.** `Calipso.Tokens` cuts a text into the pieces a reader takes whole:
+words, numbers, single marks, and paragraph breaks (a blank line).
+
+**Kinds.** `Calipso.Kinds` gives every token a kind. A mark is its own kind.
+A number is known by how many digits it has. The 120 most usual words are each
+their own kind. Any other word is known by its *shape*: capital or not, one of
+four sizes, and one of the ten most usual two-letter endings (or none). That
+is at most 253 kinds, so **a kind fits in a `Symbol`**. This is the decision
+that keeps the design small: canvases, oracles, the collapse engine and the
+counting brain work on kinds without one line changed.
+
+**The handover.** A decision of one level is the template of the level below.
+`Calipso.Pyramids` collapses a canvas of kinds (the plan), then turns it into a
+canvas of letters:
+
+- a mark or a usual word is written as given letters;
+- any other word becomes a **box**: holes for its letters, with the ending of
+  its kind already given;
+- every hole carries a *permission*: small letters only, a capital only,
+  digits only.
+
+`Calipso.Boxed_Oracles` is what makes the level below obey. It is an oracle
+that asks another oracle for its opinion and removes what the cell does not
+allow. The engine does not know it is there.
+
+There are two handovers. **Spell**: the letter brain fills the box. **Pick**:
+a word seen in that kind is taken whole, drawn by how often it was seen.
+
+**Either method.** `Calipso.Writers` is the contract: `Write (Dice, Words,
+Result)`. `Flat_Writer` and `Pyramid_Writer` both keep it, and a program that
+holds a `Writer'Class` does not know which one it has. A third method is one
+more type.
+
+What was measured (E11) and what it teaches:
+
+- Deciding the kind first is a real gain when a hidden word must be rebuilt in
+  text never studied: from 19 % to 30 % exact.
+- **An order from above is only as good as the level below can obey it.** A
+  letter brain that writes real words 97 % of the time when free writes them
+  far less often inside a box of fixed size and ending.
+- Kinds by shape are crude. "becomes" and "Colours" have the same shape and
+  are not the same kind of word.
+
+What comes next on this path: kinds learned from the company a word keeps
+(two words are the same kind if the same kinds stand around them); a level
+above sentences (paragraph, heading, list) so the shape of a page is planned
+too; and filling a hole of free length with the pyramid, which needs reading
+the surroundings bottom-up before planning top-down.
 
 ## Reading
 

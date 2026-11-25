@@ -283,6 +283,57 @@ The brain with a counting neuron packs better because its table is all small
 whole numbers, which take one or two bytes each. Votes are real numbers, and
 those take eight bytes however they are written.
 
+## E11. The pyramid: kinds of word first, then letters
+
+*Question.* The flat method looks left and right at letters. Can a level above,
+that decides the **kind** of each word before any letter, do better?
+
+*How.* `reference/experiments/pyramid_exam.py` on the English book (558,068
+letters). The first nine tenths are studied, the last tenth never. The letter
+brain is the counting one (windows up to 7 letters). The level of kinds counts
+runs of up to 5 kinds. 253 kinds were decided.
+
+**Part A. Rebuild a hidden word in text never studied** (1,082 words, the
+length is known, the most likely choice is always taken):
+
+| Method | The exact word | A word of the right kind |
+|---|---|---|
+| flat: the letter brain fills the letters | 19.4 % | 32.1 % |
+| spell: the kind is decided first, then the letter brain fills its box | 29.8 % | 43.6 % |
+| pick: the kind is decided first, then its most usual word is taken | 32.2 % | 39.4 % |
+
+**Part B. Free writing** (60 texts each; a word "exists" if it is in the
+studied text; a pair is "seen" if those two words stand together in it):
+
+| Who writes | Words that exist | Pairs of neighbours seen |
+|---|---|---|
+| real text never studied | 92.4 % | 56.2 % |
+| flat | 97.3 % | 72.9 % |
+| spell | 70.7 % | 45.3 % |
+| pick | 100.0 % | 56.1 % |
+
+Examples, same dice:
+
+    flat   bility. / I illuminated with with equal, so as to beyond there emerge, make use of those Proposition of the Colour
+    spell  Sthas is much uplained to blue, but those which usuffice for anymon celes, and therefore thered the Paper Ver.
+    pick   Flame is much appeared to blue, but those which violence for become edges, and therefore marked the Paper Ray.
+
+*What it says.*
+
+1. **Deciding the kind first helps where it should.** Ten more hidden words in
+   every hundred come back exact, and the kind of word is right more often.
+2. **The joint between levels is the weak point.** Free, the letter brain
+   writes real words 97 % of the time. Ordered to fill a box of fixed size and
+   ending, it does so far less ("uplained", "usuffice"). An order from above is
+   only as good as the level below can obey it.
+3. **Flat writing looks better than it is.** 73 % of its pairs of neighbours
+   were seen in the studied text; real text never studied has 56 %. Flat
+   writing stitches pieces it remembers. The pyramid that picks words sits at
+   56 %, like real text, but its neighbours are odd ("which violence for
+   become edges"): the kinds know shape, not meaning.
+4. **Kinds by shape are crude.** Size and ending do not tell a verb from a
+   noun. The next step is kinds learned from the company a word keeps.
+
 ## Summary
 
 | Part of the idea | Does it hold? |
@@ -295,4 +346,5 @@ those take eight bytes however they are written.
 | Fourier and Laplace as ways of looking | Laplace (fading with distance) comes within 3 or 4 points of exact positions with a third of the numbers. Fourier (waves) did not help as built. |
 | Memory of a fixed size | Yes, once each counter knows whose it is. |
 | Brains that are small to store and send | Yes: packed, four to six times smaller, nothing lost. |
+| A level above the letters (the pyramid) | Partly. Deciding the kind of word first rebuilds a hidden word better (19 % to 30 %). Free writing does not improve yet: the letter level cannot obey its boxes well, and kinds by shape are crude. |
 | Text with meaning | **Not yet.** It is the limit of these brains, not of the engine. |
