@@ -1,0 +1,138 @@
+name: Train a brain
+
+#  Trains a brain on GitHub's machines, starting from one address and following
+#  the links it finds (same site, robots.txt obeyed, one request a second).
+#
+#  Start it from the Actions tab: "Train a brain" -> "Run workflow".
+#  The brain is kept as a file of the release called "brains", so the next run
+#  with the same name carries on from where this one stopped.
+#
+#  When this file itself is changed in a pull request, it does a trial run on
+#  the little test site instead, and keeps nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      address:
+        description: "Where to start: a full address, like https://example.org/page"
+        required: true
+        type: string
+      brain:
+        description: "Name of the brain. It is kept between runs and carries on."
+        default: "page"
+        type: string
+      minutes:
+        description: "How long to train, in minutes (at most 300)"
+        default: "20"
+        type: string
+      pages:
+        description: "The most pages to read"
+        default: "500"
+        type: string
+      list:
+        description: "Size of the waiting list of links"
+        default: "1024"
+        type: string
+      recipe:
+        description: "Neurons of a NEW brain (not used if the brain already exists)"
+        default: "counting+bias+position"
+        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/train.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train-${{ inputs.brain || 'trial' }}
+  cancel-in-progress: false
+
+jobs:
+  train:
+    name: Train
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      START: ${{ inputs.address }}
+      BRAIN: ${{ inputs.brain || 'trial' }}
+      MINUTES: ${{ inputs.minutes || '1' }}
+      PAGES: ${{ inputs.pages || '10' }}
+      LIST: ${{ inputs.list || '1024' }}
+      RECIPE: ${{ inputs.recipe || 'counting+bias+position' }}
+      SHELF: brains
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check what was asked
+        run: |
+          case "$BRAIN" in
+            ""|*[!A-Za-z0-9_-]*) echo "The name of the brain may only have letters, digits, - and _."; exit 1 ;;
+          esac
+          for number in "$MINUTES" "$PAGES" "$LIST"; do
+            case "$number" in
+              ""|*[!0-9]*) echo "Minutes, pages and list must be whole numbers. Found: $number"; exit 1 ;;
+            esac
+          done
+          if [ "$MINUTES" -gt 300 ]; then
+            echo "At most 300 minutes: a job on these machines is stopped after six hours."
+            exit 1
+          fi
+
+      - name: Install GNAT and GPRbuild
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnat gprbuild
+
+      - name: Build
+        run: gprbuild -p -q -P calipso.gpr
+
+      - name: Take the brain from the shelf, if it is there
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p trained
+          gh release download "$SHELF" --pattern "$BRAIN.zmb" --dir trained \
+            || echo "No brain called $BRAIN yet: a new one will be made."
+
+      - name: Train
+        run: |
+          mkdir -p trained
+          if [ -z "$START" ]; then
+            echo "No address given: this is a trial run on the little test site."
+            ./bin/calipso_serve tests/site 8765 > site.log 2>&1 &
+            sleep 1
+            START="http://127.0.0.1:8765/index.html"
+          fi
+          printf '%s\n' "$START" > start_list.txt
+          ./bin/calipso_crawl "trained/$BRAIN.zmb" start_list.txt \
+            "pages=$PAGES" "minutes=$MINUTES" "list=$LIST" "recipe=$RECIPE" | tee report.txt
+          ls -l trained
+
+      - name: Report
+        run: |
+          {
+            echo "### Brain \`$BRAIN\`"
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Put the brain back on the shelf
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          gh release view "$SHELF" > /dev/null 2>&1 \
+            || gh release create "$SHELF" --prerelease --title "Trained brains" \
+                 --notes "Brains trained by the workflow Train a brain. Each run carries on from the file kept here."
+          gh release upload "$SHELF" "trained/$BRAIN.zmb" "trained/$BRAIN.zmb.finds.txt" --clobber
+
+      - name: Keep a copy with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: brain-${{ env.BRAIN }}
+          path: trained/
+          retention-days: 30

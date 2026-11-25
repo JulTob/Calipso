@@ -63,4 +63,34 @@ package body Calipso.Alphabets is
         return Letters.Table (Value);
         end Character_Of;
 
+    type Number_List is array (Positive range <>) of Natural;
+
+    Line_Feed_Number    : constant Natural := 10;
+    First_Basic_Number  : constant Natural := 32;
+    Last_Basic_Number   : constant Natural := 126;
+    --# From the space to the tilde: A-Z a-z 0-9 and punctuation.
+
+    Other_Letter_Numbers : constant Number_List := (
+        225, 233, 237, 243, 250, 252, 241, 193, 201, 205, 211, 218, 220, 209, 191, 161,
+        --# Spanish: accented vowels, u with dots, n with tilde, opening question and exclamation marks.
+        224, 232, 236, 242, 249, 226, 234, 238, 244, 251, 228, 235, 239, 246, 231, 227, 245, 223,
+        --# Other accented letters of western Europe.
+        8211, 8212, 8216, 8217, 8220, 8221, 8230, 171, 187, 8364, 183, 186, 170
+        --# Printing marks: dashes, curly quotes, three dots, angle quotes, euro, middle dot, ordinals.
+        );
+    --# Each letter by its Unicode number, so that this file needs nothing but plain characters.
+
+    function Common_Letters return Alphabet is
+        Letters : Alphabet;
+        begin
+        Include (Letters, Wide_Wide_Character'Val (Line_Feed_Number));
+        for Number in First_Basic_Number .. Last_Basic_Number loop
+            Include (Letters, Wide_Wide_Character'Val (Number));
+            end loop;
+        for Number of Other_Letter_Numbers loop
+            Include (Letters, Wide_Wide_Character'Val (Number));
+            end loop;
+        return Letters;
+        end Common_Letters;
+
     end Calipso.Alphabets;

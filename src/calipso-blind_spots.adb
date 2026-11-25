@@ -39,6 +39,18 @@ package body Calipso.Blind_Spots is
         return Result;
         end Scored;
 
+    function "+" (
+            Left  : in Exam_Result;
+            Right : in Exam_Result
+            ) return Exam_Result is
+        begin
+        return (
+            Hidden       => Left.Hidden + Right.Hidden,
+            Hits         => Left.Hits + Right.Hits,
+            Surprise_Sum => Left.Surprise_Sum + Right.Surprise_Sum
+            );
+        end "+";
+
     function Mean_Surprise (
             Result : in Exam_Result
             ) return Long_Float is

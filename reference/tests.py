@@ -6,27 +6,50 @@ Usage:
 The expected values used by the Ada tests come from here.
 """
 
+import os
 import sys
 
 from calipso_ref import UNKNOWN
 from calipso_ref import alphabets
+from calipso_ref import basis_neurons
+from calipso_ref import bias_neurons
 from calipso_ref import blind_spots
+from calipso_ref import brains
 from calipso_ref import canvases
 from calipso_ref import collapsing
+from calipso_ref import counting_neurons
 from calipso_ref import counting_oracles
+from calipso_ref import criteria
 from calipso_ref import distributions
+from calipso_ref import fetchers
 from calipso_ref import fragment_counts
+from calipso_ref import neuron_kinds
+from calipso_ref import pages
 from calipso_ref import random_sources
+from calipso_ref import records
 from calipso_ref import repairing
+from calipso_ref import robots
+from calipso_ref import sources
 from calipso_ref import templates
 from calipso_ref import texts
-from calipso_ref import voting_oracles
+from calipso_ref import web_addresses
+from calipso_ref import web_sources
 
 CORPUS_TEXT = (
     "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
     "el oso de la rosa es el oso de la casa. la casa del oso es la costa."
     )
 TEST_LONGEST = 5
+SAVED_BRAIN = "brain_test_saved.brn"
+SAVED_TAPE = "tape_test_saved.brn"
+PACKED_TAPE = "tape_test_saved.zmb"
+PACKED_BRAIN = "tests/data/brain_from_python.zmb"
+PYTHON_BRAIN = "tests/data/brain_from_python.brn"
+SAMPLE_FILE = "data/sample_es.txt"
+TEST_SITE = "http://test.site"
+SITE_FOLDER = "tests/site"
+PAGE_WORK_FILE = "page_test_work.tmp"
+#-- The tests are run from the top folder of the project.
 TOLERANCE = 1.0e-9
 
 
@@ -260,13 +283,107 @@ def Test_Blind_Spots(
     Check(fixture, "20 out of 22 are recovered", result.recovered == 20)
 
 
-def Test_Voting_Oracles(
+def Test_Bounded_Memory(
+        fixture: Fixture
+        ) -> None:
+    table = fragment_counts.Count_Table()
+    fragment_counts.Limit(table, 1000)
+    fragment_counts.Learn(table, fixture.corpus, TEST_LONGEST)
+    Check(fixture, "bounded memory: la appears 12 times", fragment_counts.Count_Of(table, bytes(texts.Encoded("la", fixture.letters))) == 12)
+    Check(fixture, "bounded memory: casa appears 5 times", fragment_counts.Count_Of(table, bytes(texts.Encoded("casa", fixture.letters))) == 5)
+    Check(fixture, "bounded memory: 173 counters in use", fragment_counts.Distinct_Fragments(table) == 173)
+    Check(fixture, "bounded memory: the scrambled number of la", fragment_counts.Hash(bytes(texts.Encoded("la", fixture.letters))) == 1585155634)
+    Check(fixture, "bounded memory: the check number of la", fragment_counts.Check_Of(bytes(texts.Encoded("la", fixture.letters))) == 1123950074)
+    Check(fixture, "bounded memory: a fragment never seen reads 0, even where a counter is taken", fragment_counts.Count_Of(table, bytes(texts.Encoded("laa", fixture.letters))) == 0)
+
+
+def Test_Basis_Neurons(
         fixture: Fixture
         ) -> None:
     size = alphabets.Size(fixture.letters)
-    letter_a = Symbol_For(fixture, "a")
-    board = templates.Parsed("la c_sa de", fixture.letters)
+    waves = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(waves, size, basis_neurons.BY_HARMONIC, 3, 2)
+    fading = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(fading, size, basis_neurons.BY_DECAY, 3, 2)
+    exact = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(exact, size, basis_neurons.BY_POSITION, 3, 0)
+    #-- Mirror note: curves count from 0 here and from 1 in Ada.
+    Check_Close(fixture, "harmonic: the first curve is flat", basis_neurons.Curve_Height(waves, 0, 2), 1.0)
+    Check_Close(fixture, "harmonic: cosine of the first wave", basis_neurons.Curve_Height(waves, 1, 1), 0.6234898018587336)
+    Check_Close(fixture, "harmonic: sine of the first wave", basis_neurons.Curve_Height(waves, 2, -2), -0.9749279121818236)
+    Check_Close(fixture, "harmonic: cosine of the second wave", basis_neurons.Curve_Height(waves, 3, 3), 0.6234898018587334)
+    Check_Close(fixture, "decay: the nearest neighbour counts 1", basis_neurons.Curve_Height(fading, 0, -1), 1.0)
+    Check_Close(fixture, "decay: slow fading at distance 3", basis_neurons.Curve_Height(fading, 1, -3), 0.36787944117144233)
+    Check_Close(fixture, "decay: a right curve at distance 2", basis_neurons.Curve_Height(fading, 2, 2), 0.36787944117144233)
+    Check_Close(fixture, "decay: a left curve ignores the right side", basis_neurons.Curve_Height(fading, 0, 2), 0.0)
+    Check_Close(fixture, "position: a curve is 1 at its own distance", basis_neurons.Curve_Height(exact, 3, 1), 1.0)
+    Check_Close(fixture, "position: and 0 at any other", basis_neurons.Curve_Height(exact, 3, 2), 0.0)
+    Check(fixture, "the presence neuron is a harmonic neuron with no waves", neuron_kinds.Made("presence", size).Name() == "presence")
 
+
+def Build_Small_Brain(
+        fixture: Fixture
+        ) -> brains.Brain:
+    #-- A brain small enough for the tiny corpus: starting points plus exact distances up to 3.
+    size = alphabets.Size(fixture.letters)
+    brain = brains.Brain()
+    brains.Prepare(brain, fixture.letters)
+    bias = bias_neurons.Bias_Neuron()
+    bias_neurons.Prepare(bias, size)
+    brains.Add_Neuron(brain, bias)
+    exact = basis_neurons.Basis_Neuron()
+    basis_neurons.Prepare(exact, size, basis_neurons.BY_POSITION, 3, 0)
+    brains.Add_Neuron(brain, exact)
+    return brain
+
+
+def Study_From_Corpus(
+        fixture: Fixture,
+        brain: brains.Brain,
+        lessons: int
+        ) -> blind_spots.Exam_Result:
+    source = sources.Memory_Source()
+    sources.Open_Memory(source, fixture.corpus, 24, 7)
+    dice = random_sources.Seeded(11)
+    return brains.Study(brain, source, dice, lessons)
+
+
+def Build_Mixed_Brain(
+        fixture: Fixture
+        ) -> brains.Brain:
+    brain = brains.Brain()
+    brains.Prepare(brain, fixture.letters)
+    brains.Add_Recipe(brain, "bias+presence+harmonic+decay+counting")
+    Study_From_Corpus(fixture, brain, 30)
+    return brain
+
+
+def Recipe_Is_Refused(
+        fixture: Fixture,
+        recipe: str
+        ) -> bool:
+    brain = brains.Brain()
+    brains.Prepare(brain, fixture.letters)
+    try:
+        brains.Add_Recipe(brain, recipe)
+    except neuron_kinds.Recipe_Error:
+        return True
+    return False
+
+
+def Opinion_On_A(
+        fixture: Fixture,
+        model
+        ) -> float:
+    #-- What the model bets on the letter a in "la c_sa de".
+    board = templates.Parsed("la c_sa de", fixture.letters)
+    belief = model.Opinion(board, 4)
+    return distributions.Probability_Of(belief, Symbol_For(fixture, "a"))
+
+
+def Test_Brains(
+        fixture: Fixture
+        ) -> None:
     scores = [0.0, 0.0, 1.0, -1.0, 2.0]
     #-- Position 0 is not used: the scores are (0, 1, -1, 2).
     shares = distributions.From_Scores(scores)
@@ -274,41 +391,281 @@ def Test_Voting_Oracles(
     Check_Close(fixture, "scores to probabilities: letter 4", distributions.Weight_Of(shares, 4), 0.6439142598879724)
     Check_Close(fixture, "scores to probabilities: sums to 1", distributions.Total(shares), 1.0)
 
-    pupil = voting_oracles.Voting_Oracle()
-    voting_oracles.Prepare(pupil, size, 3)
-    belief = pupil.Opinion(board, 4)
-    Check_Close(fixture, "untrained: all letters equally likely", distributions.Probability_Of(belief, letter_a), 0.08333333333333333)
-    surprise = voting_oracles.Learn_Cell(pupil, board, 4, letter_a, 0.5)
-    Check_Close(fixture, "first lesson: surprise = ln 12", surprise, 2.4849066497880004)
-    belief = pupil.Opinion(board, 4)
-    Check_Close(fixture, "after one lesson the real letter is more likely", distributions.Probability_Of(belief, letter_a), 0.13034687344398008)
+    brain = Build_Small_Brain(fixture)
+    Check_Close(fixture, "untrained: all letters equally likely", Opinion_On_A(fixture, brain), 0.08333333333333333)
+    result = Study_From_Corpus(fixture, brain, 60)
+    Check(fixture, "studying 60 lessons tests 648 letters and gets 237 right", result.hidden == 648 and result.hits == 237)
+    Check_Close(fixture, "studying 60 lessons: mean surprise", blind_spots.Mean_Surprise(result), 1.994014327824858)
+    Check_Close(fixture, "after studying: P(a)", Opinion_On_A(fixture, brain), 0.1852612847565514)
+    Check(fixture, "the brain knows its recipe", brains.Recipe_Of(brain) == "bias+position:3")
+    Check(fixture, "the brain counts its lessons", brain.lessons == 60)
+    Check(fixture, "the reach of a brain is that of its widest neuron", brain.Reach() == 3)
 
-    pupil = voting_oracles.Voting_Oracle()
-    voting_oracles.Prepare(pupil, size, 3)
-    plan = voting_oracles.Lesson_Plan()
-    plan.lessons = 60
-    plan.piece_length = 24
-    dice = random_sources.Seeded(11)
-    final_surprise = voting_oracles.Train(pupil, fixture.corpus, dice, plan)
-    Check_Close(fixture, "training 60 lessons: final surprise", final_surprise, 1.915541972753829)
-    belief = pupil.Opinion(board, 4)
-    Check_Close(fixture, "trained: P(a)", distributions.Probability_Of(belief, letter_a), 0.797228557731476)
-    Check(fixture, "trained: the most likely is a", distributions.Most_Likely(belief) == letter_a)
+    brains.Save(brain, SAVED_BRAIN)
+    restored = brains.Brain()
+    brains.Load(restored, SAVED_BRAIN)
+    os.remove(SAVED_BRAIN)
+    Check_Close(fixture, "saved and loaded: the same opinion", Opinion_On_A(fixture, restored), Opinion_On_A(fixture, brain))
+    Check(fixture, "saved and loaded: the same recipe and lessons", brains.Recipe_Of(restored) == "bias+position:3" and restored.lessons == 60)
 
-    dice = random_sources.Seeded(4)
-    result = blind_spots.Examine(fixture.model, fixture.corpus, dice, 5, 24, 0.4)
-    Check(fixture, "counting exam: 35 hits out of 45", result.hidden == 45 and result.hits == 35)
-    Check_Close(fixture, "counting exam: mean surprise", blind_spots.Mean_Surprise(result), 0.6231927485060871)
-    dice = random_sources.Seeded(4)
-    result = blind_spots.Examine(pupil, fixture.corpus, dice, 5, 24, 0.4)
-    Check(fixture, "voting exam: 28 hits out of 45", result.hidden == 45 and result.hits == 28)
-    Check_Close(fixture, "voting exam: mean surprise", blind_spots.Mean_Surprise(result), 1.0526600853953112)
+    foreign = brains.Brain()
+    brains.Load(foreign, PYTHON_BRAIN)
+    Check_Close(fixture, "a brain saved by Python: P(a)", Opinion_On_A(fixture, foreign), 0.1852612847565514)
+    Check(fixture, "a brain saved by Python: recipe and lessons", brains.Recipe_Of(foreign) == "bias+position:3" and foreign.lessons == 60)
 
-    filled = templates.Parsed("la [12] rosa.", fixture.letters)
+    unpacked = brains.Brain()
+    brains.Load(unpacked, PACKED_BRAIN)
+    Check_Close(fixture, "a packed brain saved by Python: P(a)", Opinion_On_A(fixture, unpacked), 0.1852612847565514)
+
+    sized = brains.Brain()
+    brains.Prepare(sized, fixture.letters)
+    brains.Add_Recipe(sized, "bias+position:5+decay:6:2+memory:4096:5")
+    Check(fixture, "a recipe can give sizes, and the brain says them back", brains.Recipe_Of(sized) == "bias+position:5+decay:6:2+memory:4096:5")
+    Check(fixture, "the usual sizes are not written", neuron_kinds.Made("harmonic:12:4", alphabets.Size(fixture.letters)).Name() == "harmonic")
+    Check(fixture, "the reach of a sized brain", sized.Reach() == 6)
+    Check(fixture, "a size of 0 is refused", Recipe_Is_Refused(fixture, "position:0"))
+    Check(fixture, "a size where none belongs is refused", Recipe_Is_Refused(fixture, "bias:3"))
+
+    mixed = brains.Brain()
+    brains.Prepare(mixed, fixture.letters)
+    brains.Add_Recipe(mixed, "bias+presence+harmonic+decay+counting")
+    result = Study_From_Corpus(fixture, mixed, 30)
+    Check(fixture, "five kinds of neuron in one brain: 142 right out of 326", result.hidden == 326 and result.hits == 142)
+    Check_Close(fixture, "five kinds of neuron: mean surprise", blind_spots.Mean_Surprise(result), 1.5310978676143332)
+    Check_Close(fixture, "five kinds of neuron: P(a)", Opinion_On_A(fixture, mixed), 0.6032365023141226)
+    Check(fixture, "five kinds of neuron: recipe", brains.Recipe_Of(mixed) == "bias+presence+harmonic+decay+counting")
+
+    lone = counting_neurons.Counting_Neuron()
+    counting_neurons.Prepare(lone, alphabets.Size(fixture.letters))
+    lone.Learn_From_Text(fixture.corpus)
+    counter = brains.Brain()
+    brains.Prepare(counter, fixture.letters)
+    brains.Add_Neuron(counter, lone)
+    teacher = counting_oracles.Counting_Oracle()
+    counting_oracles.Train(teacher, fixture.corpus, alphabets.Size(fixture.letters))
+    Check_Close(fixture, "a brain with only the counting neuron says what the counting oracle says", Opinion_On_A(fixture, counter), Opinion_On_A(fixture, teacher))
+    Check(fixture, "a recipe with an unknown name is refused", Recipe_Is_Refused(fixture, "bias+nonsense"))
+
+
+def Test_Criteria(
+        fixture: Fixture
+        ) -> None:
+    template = "la [12] rosa."
+    board = templates.Parsed("la c_sa de", fixture.letters)
+    mixed_brain = Build_Mixed_Brain(fixture)
+    Check_Close(fixture, "certainty of a hole with both sides known", criteria.Certainty().Readiness(board, fixture.model, 4), 0.7760918157754821)
+    Check_Close(fixture, "leftmost: readiness falls with position", criteria.Leftmost().Readiness(board, fixture.model, 4), 0.6)
+    Check_Close(fixture, "agreement among the neurons of a brain", criteria.Agreement().Readiness(board, mixed_brain, 4), 0.1481966929575596)
+    Check_Close(fixture, "agreement without neurons to compare answers as certainty", criteria.Agreement().Readiness(board, fixture.model, 4), 0.7760918157754821)
+    mix = criteria.Mixed()
+    criteria.Add_Part(mix, criteria.Certainty(), 3.0)
+    criteria.Add_Part(mix, criteria.Leftmost(), 1.0)
+    Check_Close(fixture, "a mix of criteria is their weighted mean", mix.Readiness(board, fixture.model, 4), 0.7320688618316117)
+
+    filled = templates.Parsed(template, fixture.letters)
     dice = random_sources.Seeded(1)
-    collapsing.Collapse_All(filled, pupil, dice)
-    Check(fixture, "the engine collapses the same with another brain", canvases.Blank_Count(filled) == 0)
-    Check(fixture, "collapse with votes, seed 1", templates.Rendered(filled, fixture.letters, True) == "la [casasasde la] rosa.")
+    collapsing.Collapse_By(filled, fixture.model, dice, criteria.Certainty())
+    Check(fixture, "collapse by certainty: no holes are left", canvases.Blank_Count(filled) == 0)
+    Check(fixture, "collapse by certainty is most-certain-first", templates.Rendered(filled, fixture.letters, True) == "la [costa. es la] rosa.")
+
+    filled = templates.Parsed(template, fixture.letters)
+    dice = random_sources.Seeded(1)
+    collapsing.Collapse_By(filled, fixture.model, dice, criteria.Leftmost(), collapsing.ALWAYS_MOST_LIKELY)
+    Check(fixture, "collapse by leftmost is left to right", templates.Rendered(filled, fixture.letters, True) == "la [casa de la l] rosa.")
+
+    filled = templates.Parsed(template, fixture.letters)
+    dice = random_sources.Seeded(1)
+    collapsing.Collapse_By(filled, mixed_brain, dice, criteria.Agreement())
+    Check(fixture, "collapse by agreement: no holes are left", canvases.Blank_Count(filled) == 0)
+    Check(fixture, "collapse by agreement, seed 1", templates.Rendered(filled, fixture.letters, True) == "la [coco de roso] rosa.")
+
+
+def Test_Sources(
+        fixture: Fixture
+        ) -> None:
+    source = sources.Memory_Source()
+    sources.Open_Memory(source, fixture.corpus, 24, 7)
+    piece, found = source.Next_Piece()
+    Check(fixture, "memory source: the first piece of seed 7", found and texts.Decoded(piece, fixture.letters) == " la cosa de la costa. el")
+
+    file_letters = alphabets.Alphabet()
+    texts.Learn_Alphabet(SAMPLE_FILE, file_letters)
+    whole = texts.Read_Symbols(SAMPLE_FILE, file_letters)
+    reader = sources.File_Source()
+    sources.Open_File(reader, SAMPLE_FILE, file_letters, 100)
+    count = 0
+    first_matches = False
+    while True:
+        piece, found = reader.Next_Piece()
+        if not found:
+            break
+        count = count + 1
+        if count == 1:
+            first_matches = (piece == texts.Part(whole, 0, 99))
+    sources.Close_File(reader)
+    Check(fixture, "file source: 91 pieces of 100 letters", count == 91)
+    Check(fixture, "file source: the first piece is the start of the file", first_matches)
+
+
+def Test_Records(
+        fixture: Fixture
+        ) -> None:
+    tape = records.Tape()
+    records.Write_Word(tape, "first")
+    records.Write_Count(tape, 144)
+    records.Write_Real(tape, -0.125)
+    records.Write_Reals(tape, [0.0, 2.5, 0.0, -1.0])
+    records.Save(tape, SAVED_TAPE)
+    back = records.Load(SAVED_TAPE)
+    os.remove(SAVED_TAPE)
+    Check(fixture, "a word comes back from the file", records.Read_Word(back) == "first")
+    Check(fixture, "a whole number comes back", records.Read_Count(back) == 144)
+    Check(fixture, "a real number comes back exactly", records.Read_Real(back) == -0.125)
+    row = records.Read_Reals(back)
+    Check(fixture, "a sparse row comes back with its zeros", len(row) == 4 and row[0] == 0.0 and row[1] == 2.5 and row[3] == -1.0)
+    records.Save(tape, PACKED_TAPE)
+    packed = records.Load(PACKED_TAPE)
+    packed_size = os.path.getsize(PACKED_TAPE)
+    os.remove(PACKED_TAPE)
+    Check(fixture, "the packed form keeps the same word", records.Read_Word(packed) == "first")
+    Check(fixture, "the packed form keeps the same numbers", packed.reals == tape.reals)
+    Check(fixture, "the packed form of this tape takes 50 bytes", packed_size == 50)
+    Check(fixture, "the package name of a brain file", records.Unit_Name_For("brains/page.brn") == "Page_Brain")
+    Check(fixture, "marks in the file name become underlines", records.Unit_Name_For("my-page.2.brn") == "My_Page_2_Brain")
+
+
+def Test_Web_Addresses(
+        fixture: Fixture
+        ) -> None:
+    base = "http://test.site/sub/c.html?x=1"
+    Check(fixture, "a link one folder up", web_addresses.Resolved(base, "../a.html") == "http://test.site/a.html")
+    Check(fixture, "a link from the top of the site", web_addresses.Resolved(base, "/index.html") == "http://test.site/index.html")
+    Check(fixture, "the part after # is dropped", web_addresses.Resolved(base, "d.html#top") == "http://test.site/sub/d.html")
+    Check(fixture, "a link to the same page leads nowhere", web_addresses.Resolved(base, "#top") == "")
+    Check(fixture, "a mail link cannot be followed", web_addresses.Resolved(base, "mailto:me@test.site") == "")
+    Check(fixture, "a full address gets its final slash", web_addresses.Resolved(base, "http://other.org") == "http://other.org/")
+    Check(fixture, "a link that only changes the question", web_addresses.Resolved(base, "?page=2") == "http://test.site/sub/c.html?page=2")
+    Check(fixture, "stay-here and go-up parts are worked out", web_addresses.Resolved(base, "./e/../f.html") == "http://test.site/sub/f.html")
+    Check(fixture, "going up too far stops at the top", web_addresses.Resolved(base, "../../..") == "http://test.site/")
+    Check(fixture, "a link with a space is dropped", web_addresses.Resolved(base, "a b.html") == "")
+    Check(fixture, "the host of an address", web_addresses.Host_Of("https://test.site:8080/a/b") == "test.site:8080")
+    Check(fixture, "by name: no ending may be a page", web_addresses.Kind_By_Name("http://test.site/wiki/Sea") == web_addresses.PAGE)
+    Check(fixture, "by name: a picture, even in capitals", web_addresses.Kind_By_Name("http://test.site/a.PNG?x=1.html") == web_addresses.PICTURE)
+    Check(fixture, "by name: a film", web_addresses.Kind_By_Name("http://test.site/clip.mp4") == web_addresses.VIDEO)
+    Check(fixture, "by name: program code is writing", web_addresses.Kind_By_Name("http://test.site/tool.py") == web_addresses.WRITING)
+    Check(fixture, "by label: a page", web_addresses.Kind_By_Label("Text/HTML; charset=utf-8") == web_addresses.PAGE)
+    Check(fixture, "by label: a drawing written as text is writing", web_addresses.Kind_By_Label("image/svg+xml") == web_addresses.WRITING)
+    Check(fixture, "by label: unknown bytes are other", web_addresses.Kind_By_Label("application/octet-stream") == web_addresses.OTHER)
+    Check(fixture, "the sense of program code is its ending", web_addresses.Sense_Of("http://test.site/tool.py", web_addresses.WRITING) == "py")
+    Check(fixture, "the sense of a page is page", web_addresses.Sense_Of("http://test.site/a.html", web_addresses.PAGE) == "page")
+
+
+PAGE_MARKUP = (
+    "<html><head><title>Test &amp; page</title><style>p {color: red}</style>"
+    "<script>var a = '<p>not text</p>';</script></head><body><!-- a <b>comment</b> -->"
+    "<h1>Hello   world</h1><p>First <a href=\"a.html?x=1&amp;y=2\">link</a> and "
+    "<A HREF='b.html'>another</A>&nbsp;one &#233; &bogus; AT&T.</p>"
+    "<img alt=\"x\" src=\"pic.png\"><p>Second<br>third <video src=clip.mp4 controls></video> end</p>"
+    "<svg><circle/></svg>tail <a>no link</a> <a title=\"href=x\" href = c.html >c</a>"
+    )
+
+
+def Test_Pages(
+        fixture: Fixture
+        ) -> None:
+    content = pages.Read(PAGE_MARKUP)
+    Check(fixture, "the page is taken apart into 10 blocks", len(content.blocks) == 10)
+    Check(fixture, "the title is the first paragraph", content.blocks[0].kind == pages.WORDS and content.blocks[0].text == "Test & page")
+    Check(fixture, "runs of spaces count as one", content.blocks[1].text == "Hello world")
+    Check(fixture, "letters written by name or number are read", content.blocks[2].text == "First link and another one " + chr(233) + " &bogus; AT&T.")
+    Check(fixture, "a picture keeps its place and its address", content.blocks[3].kind == pages.PICTURE and content.blocks[3].text == "pic.png")
+    Check(fixture, "a line break starts a new paragraph", content.blocks[4].text == "Second" and content.blocks[5].text == "third")
+    Check(fixture, "a film keeps its place and its address", content.blocks[6].kind == pages.VIDEO and content.blocks[6].text == "clip.mp4")
+    Check(fixture, "a drawing inside the page keeps its place", content.blocks[8].kind == pages.DRAWING)
+    Check(fixture, "the last paragraph", content.blocks[9].text == "tail no link c")
+    Check(fixture, "three links, as written", len(content.links) == 3 and content.links[0] == "a.html?x=1&y=2" and content.links[1] == "b.html" and content.links[2] == "c.html")
+    Check(fixture, "the words of the page, one paragraph per line", len(pages.Text_Of(content)) == 99)
+
+
+RULES_TEXT = (
+    "# rules for the test\n"
+    "User-agent: otherbot\n"
+    "Disallow: /\n"
+    "\n"
+    "User-agent: *\n"
+    "Disallow: /private/\n"
+    "Allow: /private/open/\n"
+    "Disallow: /*.pdf$\n"
+    "Disallow: /search?*q=\n"
+    "Crawl-delay: 5\n"
+    "Disallow:\n"
+    )
+
+
+def Test_Robots(
+        fixture: Fixture
+        ) -> None:
+    rules = robots.Parsed(RULES_TEXT, "Calipso")
+    Check(fixture, "the top of the site is allowed", robots.Allows(rules, "/"))
+    Check(fixture, "a forbidden folder", not robots.Allows(rules, "/private/x"))
+    Check(fixture, "the longest rule that fits decides", robots.Allows(rules, "/private/open/x"))
+    Check(fixture, "a rule with * and $: ends in .pdf", not robots.Allows(rules, "/a/b.pdf"))
+    Check(fixture, "a rule with $ does not fit a longer path", robots.Allows(rules, "/a/b.pdfx"))
+    Check(fixture, "a rule with * in the middle", not robots.Allows(rules, "/search?a=1&q=2"))
+    Check(fixture, "the same rule, when the end is missing", robots.Allows(rules, "/search?a=1"))
+    Check(fixture, "the site asks for 5 seconds between requests", robots.Delay_Of(rules) == 5.0)
+    named = robots.Parsed(RULES_TEXT + "User-agent: calipso\nDisallow: /only-us/\n", "Calipso")
+    Check(fixture, "rules that name us replace the rules for everybody", robots.Allows(named, "/private/x") and not robots.Allows(named, "/only-us/x"))
+    Check(fixture, "no rules at all: everything is allowed", robots.Allows(robots.Allow_Everything(), "/x"))
+    Check(fixture, "rules that could not be read: nothing is allowed", not robots.Allows(robots.Allow_Nothing(), "/x"))
+
+
+def Test_Web_Sources(
+        fixture: Fixture
+        ) -> None:
+    letters = alphabets.Common_Letters()
+    Check(fixture, "the common alphabet has 144 symbols", alphabets.Size(letters) == 144)
+    settings = web_sources.Settings()
+    settings.pause_seconds = 0.0
+    source = web_sources.Web_Source()
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/index.html")
+    count = 0
+    first_text = ""
+    while True:
+        piece, found = source.Next_Piece()
+        if not found:
+            break
+        count = count + 1
+        if count == 1:
+            first_text = texts.Decoded(piece, letters)
+    os.remove(PAGE_WORK_FILE)
+    tally = source.tally
+    Check(fixture, "the site gives 17 pieces of 64 letters", count == 17)
+    Check(fixture, "the first piece starts with the title", first_text.startswith("The little test site\nThe little test site\nThis site is small"))
+    Check(fixture, "5 pages asked for, 4 read, 1113 letters", tally.asked == 5 and tally.read == 4 and tally.letters == 1113)
+    Check(fixture, "the private page is refused by the site's rules", tally.refused == 1)
+    Check(fixture, "the file with no ending is asked for, and is not text", tally.not_text == 1 and len(source.finds[web_addresses.OTHER]) == 1)
+    Check(fixture, "nothing failed", tally.failed == 0)
+    Check(fixture, "files that are not pages are filed by kind, never asked for",
+          len(source.finds[web_addresses.WRITING]) == 2 and len(source.finds[web_addresses.PICTURE]) == 1
+          and len(source.finds[web_addresses.VIDEO]) == 1 and len(source.finds[web_addresses.SOUND]) == 1)
+    Check(fixture, "a page linked again is not listed again: it gets mentions", web_sources.Mentions_Of(source, TEST_SITE + "/index.html") == 4)
+    Check(fixture, "the other site was never listed", web_sources.Mentions_Of(source, "http://elsewhere.example/") == 0)
+
+    settings = web_sources.Settings()
+    settings.pause_seconds = 0.0
+    settings.list_size = 2
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/index.html")
+    while True:
+        piece, found = source.Next_Piece()
+        if not found:
+            break
+    os.remove(PAGE_WORK_FILE)
+    tally = source.tally
+    Check(fixture, "a waiting list of 2: the 4 pages are still read", tally.asked == 4 and tally.read == 4)
+    Check(fixture, "a waiting list of 2: 3 links are left out", tally.left_out == 3 and web_sources.Waiting_Count(source) == 0)
 
 
 def Main() -> None:
@@ -323,7 +680,16 @@ def Main() -> None:
         ("Collapse", Test_Collapsing),
         ("Repair and grow", Test_Repairing),
         ("Blind spots", Test_Blind_Spots),
-        ("Voting brain", Test_Voting_Oracles),
+        ("Bounded memory", Test_Bounded_Memory),
+        ("Neurons that measure distance", Test_Basis_Neurons),
+        ("Brain files", Test_Records),
+        ("Brains", Test_Brains),
+        ("Criteria", Test_Criteria),
+        ("Sources", Test_Sources),
+        ("Web addresses", Test_Web_Addresses),
+        ("Pages", Test_Pages),
+        ("Site rules", Test_Robots),
+        ("Web source", Test_Web_Sources),
         ]
     for title, group in groups:
         print(title)

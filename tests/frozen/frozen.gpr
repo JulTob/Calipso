@@ -1,0 +1,30 @@
+--  A brain compiled into a program.
+--
+--  The file frozen.brn is a saved brain. Calipso can load it as data, and it
+--  is also Ada source: the Naming package below tells the compiler that the
+--  package Frozen_Brain is to be found in that file.
+--
+--     ./bin/calipso_brain study tests/frozen/frozen.brn data/sample_es.txt 20
+--     gprbuild -p -P tests/frozen/frozen.gpr
+--     ./tests/frozen/bin/frozen_check tests/frozen/frozen.brn
+
+project Frozen is
+
+    for Source_Dirs use ("../../src", ".");
+    for Object_Dir use "obj";
+    for Exec_Dir use "bin";
+    for Main use ("frozen_check.adb");
+
+    package Naming is
+        for Spec ("Frozen_Brain") use "frozen.brn";
+    end Naming;
+
+    package Compiler is
+        for Default_Switches ("Ada") use ("-gnat2012", "-gnata", "-gnatwa", "-g", "-O2");
+    end Compiler;
+
+    package Binder is
+        for Default_Switches ("Ada") use ("-Es");
+    end Binder;
+
+end Frozen;

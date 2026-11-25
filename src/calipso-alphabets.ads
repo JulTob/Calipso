@@ -43,6 +43,9 @@ package Calipso.Alphabets is
             ) return Wide_Wide_Character
         with Pre => Value <= Size (Letters);
 
+    function Common_Letters return Alphabet;
+    --# A ready-made alphabet for western text, for when the text is not known beforehand.
+
 private
 
     type Character_Table is array (Symbol) of Wide_Wide_Character;

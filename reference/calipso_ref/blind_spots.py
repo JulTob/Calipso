@@ -56,6 +56,18 @@ class Exam_Result:
         self.surprise_sum = 0.0
 
 
+def Added(
+        left: Exam_Result,
+        right: Exam_Result
+        ) -> Exam_Result:
+    #-- The score of two exams taken one after the other. (In Ada this is the operator "+".)
+    total = Exam_Result()
+    total.hidden = left.hidden + right.hidden
+    total.hits = left.hits + right.hits
+    total.surprise_sum = left.surprise_sum + right.surprise_sum
+    return total
+
+
 def Mean_Surprise(
         result: Exam_Result
         ) -> float:

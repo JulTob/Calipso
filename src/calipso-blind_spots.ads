@@ -38,6 +38,12 @@ package Calipso.Blind_Spots is
         Surprise_Sum : Long_Float := 0.0;
         end record;
 
+    function "+" (
+            Left  : in Exam_Result;
+            Right : in Exam_Result
+            ) return Exam_Result;
+    --# The score of two exams taken one after the other.
+
     function Mean_Surprise (
             Result : in Exam_Result
             ) return Long_Float;

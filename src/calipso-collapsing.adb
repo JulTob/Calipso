@@ -169,4 +169,83 @@ package body Calipso.Collapsing is
             end loop;
         end Collapse_All;
 
+    type Readiness_Note is record
+        Is_Fresh  : Boolean := False;
+        Readiness : Long_Float := 0.0;
+        end record;
+
+    type Readiness_Notes is array (Positive range <>) of Readiness_Note;
+
+    procedure Refresh_Readiness (
+            Notes : in out Readiness_Notes;
+            Board : in     Canvases.Canvas;
+            Model : in     Oracles.Oracle'Class;
+            Guide : in     Criteria.Criterion'Class
+            ) is
+        begin
+        for Position in 1 .. Canvases.Length (Board) loop
+            if Canvases.Is_Blank (Board, Position) and then not Notes (Position).Is_Fresh then
+                Notes (Position).Readiness := Guide.Readiness (Board, Model, Position);
+                Notes (Position).Is_Fresh := True;
+                end if;
+            end loop;
+        end Refresh_Readiness;
+
+    function Readiest_Blank (
+            Notes : in Readiness_Notes;
+            Board : in Canvases.Canvas
+            ) return Natural is
+        Best : Natural := 0;
+        begin
+        for Position in 1 .. Canvases.Length (Board) loop
+            if Canvases.Is_Blank (Board, Position) then
+                if Best = 0 then
+                    Best := Position;
+                elsif Notes (Position).Readiness > Notes (Best).Readiness then
+                    Best := Position;
+                    end if;
+                end if;
+            end loop;
+        return Best;
+        end Readiest_Blank;
+    --# The readiest hole. On a tie, the first one. 0 if there are no holes.
+
+    procedure Mark_Readiness_Stale (
+            Notes    : in out Readiness_Notes;
+            Position : in     Positive;
+            Reach    : in     Natural
+            ) is
+        First : constant Integer := Integer'Max (Notes'First, Position - Reach);
+        Last  : constant Integer := Integer'Min (Notes'Last, Position + Reach);
+        begin
+        for Neighbour in First .. Last loop
+            Notes (Neighbour).Is_Fresh := False;
+            end loop;
+        end Mark_Readiness_Stale;
+
+    procedure Collapse_By (
+            Board    : in out Canvases.Canvas;
+            Model    : in     Oracles.Oracle'Class;
+            Dice     : in out Random_Sources.Generator;
+            Guide    : in     Criteria.Criterion'Class;
+            Rule     : in     Choice_Rule := By_Chance;
+            Observer : access procedure (
+                    Current  : in Canvases.Canvas;
+                    Position : in Positive
+                    ) := null
+            ) is
+        Notes  : Readiness_Notes (1 .. Canvases.Length (Board));
+        Target : Natural;
+        begin
+        while Canvases.Blank_Count (Board) > 0 loop
+            Refresh_Readiness (Notes, Board, Model, Guide);
+            Target := Readiest_Blank (Notes, Board);
+            Collapse_Cell (Board, Model, Dice, Rule, Target);
+            Mark_Readiness_Stale (Notes, Target, Model.Reach);
+            if Observer /= null then
+                Observer (Board, Target);
+                end if;
+            end loop;
+        end Collapse_By;
+
     end Calipso.Collapsing;

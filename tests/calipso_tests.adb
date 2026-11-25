@@ -10,33 +10,68 @@
 --  The expected values come from reference/tests.py (same corpus, same steps).
 
 with Ada.Command_Line;
+with Ada.Containers;
+with Ada.Directories;
 with Ada.Exceptions;
+with Ada.Strings.Wide_Wide_Unbounded;
 
 with Calipso.Alphabets;
+with Calipso.Basis_Neurons;
+with Calipso.Bias_Neurons;
 with Calipso.Blind_Spots;
+with Calipso.Brains;
 with Calipso.Canvases;
 with Calipso.Collapsing;
 with Calipso.Console;
+with Calipso.Counting_Neurons;
 with Calipso.Counting_Oracles;
+with Calipso.Criteria;
 with Calipso.Distributions;
+with Calipso.File_Sources;
+with Calipso.Folder_Fetchers;
 with Calipso.Fragment_Counts;
+with Calipso.Memory_Sources;
+with Calipso.Neuron_Kinds;
+with Calipso.Neurons;
+with Calipso.Numbers;
+with Calipso.Oracles;
+with Calipso.Pages;
 with Calipso.Random_Sources;
+with Calipso.Records;
 with Calipso.Repairing;
+with Calipso.Robots;
 with Calipso.Templates;
 with Calipso.Texts;
-with Calipso.Voting_Oracles;
+with Calipso.Web_Addresses;
+with Calipso.Web_Sources;
 
 procedure Calipso_Tests is
 
     use Calipso;
+    use type Ada.Containers.Hash_Type;
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
+    use type Pages.Block_Kind;
+    use type Texts.Symbol_Text;
+    use type Web_Addresses.Content_Kind;
+
+    package Wide_Texts renames Ada.Strings.Wide_Wide_Unbounded;
 
     Corpus_Text : constant Wide_Wide_String :=
         "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
         & "el oso de la rosa es el oso de la casa. la casa del oso es la costa.";
 
     Test_Longest : constant Positive := 5;
+    Saved_Brain  : constant String := "brain_test_saved.brn";
+    Saved_Tape   : constant String := "tape_test_saved.brn";
+    Packed_Tape  : constant String := "tape_test_saved.zmb";
+    Packed_Brain : constant String := "tests/data/brain_from_python.zmb";
+    Python_Brain : constant String := "tests/data/brain_from_python.brn";
+    Sample_File  : constant String := "data/sample_es.txt";
+    Test_Site    : constant String := "http://test.site";
+    Site_Folder  : constant String := "tests/site";
+    Page_Work_File : constant String := "page_test_work.tmp";
+    --# The tests are run from the top folder of the project.
     Tolerance    : constant Long_Float := 1.0E-9;
 
     Letters : Alphabets.Alphabet;
@@ -335,62 +370,485 @@ procedure Calipso_Tests is
         Check ("20 out of 22 are recovered", Result.Recovered = 20);
         end Test_Blind_Spots;
 
-    procedure Test_Voting_Oracles is
-        Board    : constant Canvases.Canvas := Templates.Parsed ("la c_sa de", Letters);
-        Letter_A : constant Symbol := Symbol_For ('a');
+    procedure Test_Bounded_Memory is
+        Table : Fragment_Counts.Count_Table;
+        begin
+        Fragment_Counts.Limit (Table, 1_000);
+        Fragment_Counts.Learn (Table, Corpus, Test_Longest);
+        Check ("bounded memory: la appears 12 times", Fragment_Counts.Count_Of (Table, Piece_Of ("la")) = 12);
+        Check ("bounded memory: casa appears 5 times", Fragment_Counts.Count_Of (Table, Piece_Of ("casa")) = 5);
+        Check ("bounded memory: 173 counters in use", Fragment_Counts.Distinct_Fragments (Table) = 173);
+        Check ("bounded memory: the scrambled number of la", Fragment_Counts.Hash (Piece_Of ("la")) = 1_585_155_634);
+        Check ("bounded memory: the check number of la", Fragment_Counts.Check_Of (Piece_Of ("la")) = 1_123_950_074);
+        Check (
+            "bounded memory: a fragment never seen reads 0, even where a counter is taken",
+            Fragment_Counts.Count_Of (Table, Piece_Of ("laa")) = 0
+            );
+        end Test_Bounded_Memory;
+
+    procedure Test_Basis_Neurons is
+        Size     : constant Symbol := Alphabets.Size (Letters);
+        Waves    : Basis_Neurons.Basis_Neuron;
+        Fading   : Basis_Neurons.Basis_Neuron;
+        Exact    : Basis_Neurons.Basis_Neuron;
+        Presence : constant Neurons.Neuron'Class := Neuron_Kinds.Made ("presence", Size);
+        begin
+        Basis_Neurons.Prepare (Waves, Size, Basis_Neurons.By_Harmonic, 3, 2);
+        Basis_Neurons.Prepare (Fading, Size, Basis_Neurons.By_Decay, 3, 2);
+        Basis_Neurons.Prepare (Exact, Size, Basis_Neurons.By_Position, 3, 0);
+        --# Mirror note: curves count from 1 here and from 0 in Python.
+        Check_Close ("harmonic: the first curve is flat", Basis_Neurons.Curve_Height (Waves, 1, 2), 1.0);
+        Check_Close ("harmonic: cosine of the first wave", Basis_Neurons.Curve_Height (Waves, 2, 1), 0.6234898018587336);
+        Check_Close ("harmonic: sine of the first wave", Basis_Neurons.Curve_Height (Waves, 3, -2), -0.9749279121818236);
+        Check_Close ("harmonic: cosine of the second wave", Basis_Neurons.Curve_Height (Waves, 4, 3), 0.6234898018587334);
+        Check_Close ("decay: the nearest neighbour counts 1", Basis_Neurons.Curve_Height (Fading, 1, -1), 1.0);
+        Check_Close ("decay: slow fading at distance 3", Basis_Neurons.Curve_Height (Fading, 2, -3), 0.36787944117144233);
+        Check_Close ("decay: a right curve at distance 2", Basis_Neurons.Curve_Height (Fading, 3, 2), 0.36787944117144233);
+        Check_Close ("decay: a left curve ignores the right side", Basis_Neurons.Curve_Height (Fading, 1, 2), 0.0);
+        Check_Close ("position: a curve is 1 at its own distance", Basis_Neurons.Curve_Height (Exact, 4, 1), 1.0);
+        Check_Close ("position: and 0 at any other", Basis_Neurons.Curve_Height (Exact, 4, 2), 0.0);
+        Check ("the presence neuron is a harmonic neuron with no waves", Presence.Name = "presence");
+        end Test_Basis_Neurons;
+
+    procedure Build_Small_Brain (
+            Pupil : in out Brains.Brain
+            ) is
+        Size  : constant Symbol := Alphabets.Size (Letters);
+        Bias  : Bias_Neurons.Bias_Neuron;
+        Exact : Basis_Neurons.Basis_Neuron;
+        begin
+        Brains.Prepare (Pupil, Letters);
+        Bias_Neurons.Prepare (Bias, Size);
+        Brains.Add_Neuron (Pupil, Bias);
+        Basis_Neurons.Prepare (Exact, Size, Basis_Neurons.By_Position, 3, 0);
+        Brains.Add_Neuron (Pupil, Exact);
+        end Build_Small_Brain;
+    --# A brain small enough for the tiny corpus: starting points plus exact distances up to 3.
+
+    procedure Study_From_Corpus (
+            Pupil   : in out Brains.Brain;
+            Lessons : in     Natural;
+            Result  :    out Blind_Spots.Exam_Result
+            ) is
+        Reader : Memory_Sources.Memory_Source;
+        Dice   : Random_Sources.Generator := Random_Sources.Seeded (11);
+        begin
+        Memory_Sources.Open (Reader, Corpus, 24, 7);
+        Brains.Study (Pupil, Reader, Dice, Lessons, Result);
+        end Study_From_Corpus;
+
+    procedure Build_Mixed_Brain (
+            Pupil : in out Brains.Brain
+            ) is
+        Unused : Blind_Spots.Exam_Result;
+        --# The score of these lessons is not needed here; only the trained brain is.
+        --# (The compiler knows a variable called Unused is meant to be left alone.)
+        begin
+        Brains.Prepare (Pupil, Letters);
+        Brains.Add_Recipe (Pupil, "bias+presence+harmonic+decay+counting");
+        Study_From_Corpus (Pupil, 30, Unused);
+        end Build_Mixed_Brain;
+
+    function Recipe_Is_Refused (
+            Recipe : in String
+            ) return Boolean is
+        Pupil : Brains.Brain;
+        begin
+        Brains.Prepare (Pupil, Letters);
+        Brains.Add_Recipe (Pupil, Recipe);
+        return False;
+        exception
+        when Neuron_Kinds.Recipe_Error =>
+            return True;
+        end Recipe_Is_Refused;
+
+    function Opinion_On_A (
+            Model : in Oracles.Oracle'Class
+            ) return Long_Float is
+        Board  : constant Canvases.Canvas := Templates.Parsed ("la c_sa de", Letters);
+        Belief : constant Distributions.Distribution := Model.Opinion (Board, 5);
+        begin
+        return Distributions.Probability_Of (Belief, Symbol_For ('a'));
+        end Opinion_On_A;
+    --# What the model bets on the letter a in "la c_sa de".
+
+    procedure Test_Brains is
         Scores   : constant Distributions.Score_Array (1 .. 4) := (0.0, 1.0, -1.0, 2.0);
         Shares   : constant Distributions.Distribution := Distributions.From_Scores (Scores);
-        Pupil    : Voting_Oracles.Voting_Oracle;
-        Plan     : Voting_Oracles.Lesson_Plan := Voting_Oracles.Default_Plan;
-        Dice     : Random_Sources.Generator := Random_Sources.Seeded (11);
-        Surprise : Long_Float;
+        Pupil    : Brains.Brain;
+        Restored : Brains.Brain;
+        Foreign  : Brains.Brain;
+        Mixed    : Brains.Brain;
+        Unpacked : Brains.Brain;
+        Sized    : Brains.Brain;
+        Usual_Waves : constant Neurons.Neuron'Class := Neuron_Kinds.Made ("harmonic:12:4", Alphabets.Size (Letters));
+        Counter  : Brains.Brain;
+        Lone     : Counting_Neurons.Counting_Neuron;
+        Teacher  : Counting_Oracles.Counting_Oracle;
         Result   : Blind_Spots.Exam_Result;
-        Filled   : Canvases.Canvas := Templates.Parsed ("la [12] rosa.", Letters);
         begin
         Check_Close ("scores to probabilities: letter 1", Distributions.Weight_Of (Shares, 1), 0.08714431874203257);
         Check_Close ("scores to probabilities: letter 4", Distributions.Weight_Of (Shares, 4), 0.6439142598879724);
         Check_Close ("scores to probabilities: sums to 1", Distributions.Total (Shares), 1.0);
 
-        Voting_Oracles.Prepare (Pupil, Alphabets.Size (Letters), 3);
-        declare
-            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
-            begin
-            Check_Close ("untrained: all letters equally likely", Distributions.Probability_Of (Belief, Letter_A), 0.08333333333333333);
-            end;
-        Voting_Oracles.Learn_Cell (Pupil, Board, 5, Letter_A, 0.5, Surprise);
-        Check_Close ("first lesson: surprise = ln 12", Surprise, 2.4849066497880004);
-        declare
-            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
-            begin
-            Check_Close ("after one lesson the real letter is more likely", Distributions.Probability_Of (Belief, Letter_A), 0.13034687344398008);
-            end;
+        Build_Small_Brain (Pupil);
+        Check_Close ("untrained: all letters equally likely", Opinion_On_A (Pupil), 0.08333333333333333);
+        Study_From_Corpus (Pupil, 60, Result);
+        Check ("studying 60 lessons tests 648 letters and gets 237 right", Result.Hidden = 648 and then Result.Hits = 237);
+        Check_Close ("studying 60 lessons: mean surprise", Blind_Spots.Mean_Surprise (Result), 1.994014327824858);
+        Check_Close ("after studying: P(a)", Opinion_On_A (Pupil), 0.1852612847565514);
+        Check ("the brain knows its recipe", Brains.Recipe_Of (Pupil) = "bias+position:3");
+        Check ("the brain counts its lessons", Brains.Lessons_Studied (Pupil) = 60);
+        Check ("the reach of a brain is that of its widest neuron", Pupil.Reach = 3);
 
-        Voting_Oracles.Prepare (Pupil, Alphabets.Size (Letters), 3);
-        Plan.Lessons := 60;
-        Plan.Piece_Length := 24;
-        Voting_Oracles.Train (Pupil, Corpus, Dice, Surprise, Plan);
-        Check_Close ("training 60 lessons: final surprise", Surprise, 1.915541972753829);
-        declare
-            Belief : constant Distributions.Distribution := Pupil.Opinion (Board, 5);
-            begin
-            Check_Close ("trained: P(a)", Distributions.Probability_Of (Belief, Letter_A), 0.797228557731476);
-            Check ("trained: the most likely is a", Distributions.Most_Likely (Belief) = Letter_A);
-            end;
+        Brains.Save (Pupil, Saved_Brain);
+        Brains.Load (Restored, Saved_Brain);
+        Ada.Directories.Delete_File (Saved_Brain);
+        Check_Close ("saved and loaded: the same opinion", Opinion_On_A (Restored), Opinion_On_A (Pupil));
+        Check (
+            "saved and loaded: the same recipe and lessons",
+            Brains.Recipe_Of (Restored) = "bias+position:3" and then Brains.Lessons_Studied (Restored) = 60
+            );
 
-        Dice := Random_Sources.Seeded (4);
-        Blind_Spots.Examine (Model, Corpus, Dice, 5, 24, 0.4, Result);
-        Check ("counting exam: 35 hits out of 45", Result.Hidden = 45 and then Result.Hits = 35);
-        Check_Close ("counting exam: mean surprise", Blind_Spots.Mean_Surprise (Result), 0.6231927485060871);
-        Dice := Random_Sources.Seeded (4);
-        Blind_Spots.Examine (Pupil, Corpus, Dice, 5, 24, 0.4, Result);
-        Check ("voting exam: 28 hits out of 45", Result.Hidden = 45 and then Result.Hits = 28);
-        Check_Close ("voting exam: mean surprise", Blind_Spots.Mean_Surprise (Result), 1.0526600853953112);
+        Brains.Load (Foreign, Python_Brain);
+        Check_Close ("a brain saved by Python: P(a)", Opinion_On_A (Foreign), 0.1852612847565514);
+        Check (
+            "a brain saved by Python: recipe and lessons",
+            Brains.Recipe_Of (Foreign) = "bias+position:3" and then Brains.Lessons_Studied (Foreign) = 60
+            );
 
+        Brains.Load (Unpacked, Packed_Brain);
+        Check_Close ("a packed brain saved by Python: P(a)", Opinion_On_A (Unpacked), 0.1852612847565514);
+
+        Brains.Prepare (Sized, Letters);
+        Brains.Add_Recipe (Sized, "bias+position:5+decay:6:2+memory:4096:5");
+        Check (
+            "a recipe can give sizes, and the brain says them back",
+            Brains.Recipe_Of (Sized) = "bias+position:5+decay:6:2+memory:4096:5"
+            );
+        Check ("the usual sizes are not written", Usual_Waves.Name = "harmonic");
+        Check ("the reach of a sized brain", Sized.Reach = 6);
+        Check ("a size of 0 is refused", Recipe_Is_Refused ("position:0"));
+        Check ("a size where none belongs is refused", Recipe_Is_Refused ("bias:3"));
+
+        Brains.Prepare (Mixed, Letters);
+        Brains.Add_Recipe (Mixed, "bias+presence+harmonic+decay+counting");
+        Study_From_Corpus (Mixed, 30, Result);
+        Check ("five kinds of neuron in one brain: 142 right out of 326", Result.Hidden = 326 and then Result.Hits = 142);
+        Check_Close ("five kinds of neuron: mean surprise", Blind_Spots.Mean_Surprise (Result), 1.5310978676143332);
+        Check_Close ("five kinds of neuron: P(a)", Opinion_On_A (Mixed), 0.6032365023141226);
+        Check ("five kinds of neuron: recipe", Brains.Recipe_Of (Mixed) = "bias+presence+harmonic+decay+counting");
+
+        Counting_Neurons.Prepare (Lone, Alphabets.Size (Letters));
+        Lone.Learn_From_Text (Corpus);
+        Brains.Prepare (Counter, Letters);
+        Brains.Add_Neuron (Counter, Lone);
+        Counting_Oracles.Train (Teacher, Corpus, Alphabets.Size (Letters));
+        Check_Close (
+            "a brain with only the counting neuron says what the counting oracle says",
+            Opinion_On_A (Counter),
+            Opinion_On_A (Teacher)
+            );
+        Check ("a recipe with an unknown name is refused", Recipe_Is_Refused ("bias+nonsense"));
+        end Test_Brains;
+
+    procedure Test_Criteria is
+        Template     : constant Wide_Wide_String := "la [12] rosa.";
+        Board        : constant Canvases.Canvas := Templates.Parsed ("la c_sa de", Letters);
+        By_Certainty : constant Criteria.Certainty := (null record);
+        By_Agreement : constant Criteria.Agreement := (null record);
+        By_Leftmost  : constant Criteria.Leftmost := (null record);
+        --# These three criteria hold no data: all that matters is which one it is.
+        Mix          : Criteria.Mixed;
+        Mixed_Brain  : Brains.Brain;
+        Filled       : Canvases.Canvas := Templates.Parsed (Template, Letters);
+        Dice         : Random_Sources.Generator := Random_Sources.Seeded (1);
+        begin
+        Build_Mixed_Brain (Mixed_Brain);
+        Check_Close ("certainty of a hole with both sides known", By_Certainty.Readiness (Board, Model, 5), 0.7760918157754821);
+        Check_Close ("leftmost: readiness falls with position", By_Leftmost.Readiness (Board, Model, 5), 0.6);
+        Check_Close ("agreement among the neurons of a brain", By_Agreement.Readiness (Board, Mixed_Brain, 5), 0.1481966929575596);
+        Check_Close (
+            "agreement without neurons to compare answers as certainty",
+            By_Agreement.Readiness (Board, Model, 5),
+            0.7760918157754821
+            );
+        Criteria.Add_Part (Mix, By_Certainty, 3.0);
+        Criteria.Add_Part (Mix, By_Leftmost, 1.0);
+        Check_Close ("a mix of criteria is their weighted mean", Mix.Readiness (Board, Model, 5), 0.7320688618316117);
+
+        Collapsing.Collapse_By (Filled, Model, Dice, By_Certainty);
+        Check ("collapse by certainty: no holes are left", Canvases.Blank_Count (Filled) = 0);
+        Check_Mirror ("collapse by certainty is most-certain-first", Templates.Rendered (Filled, Letters, True), "la [costa. es la] rosa.");
+
+        Filled := Templates.Parsed (Template, Letters);
         Dice := Random_Sources.Seeded (1);
-        Collapsing.Collapse_All (Filled, Pupil, Dice);
-        Check ("the engine collapses the same with another brain", Canvases.Blank_Count (Filled) = 0);
-        Check_Mirror ("collapse with votes, seed 1", Templates.Rendered (Filled, Letters, True), "la [casasasde la] rosa.");
-        end Test_Voting_Oracles;
+        Collapsing.Collapse_By (Filled, Model, Dice, By_Leftmost, Collapsing.Always_Most_Likely);
+        Check_Mirror ("collapse by leftmost is left to right", Templates.Rendered (Filled, Letters, True), "la [casa de la l] rosa.");
+
+        Filled := Templates.Parsed (Template, Letters);
+        Dice := Random_Sources.Seeded (1);
+        Collapsing.Collapse_By (Filled, Mixed_Brain, Dice, By_Agreement);
+        Check ("collapse by agreement: no holes are left", Canvases.Blank_Count (Filled) = 0);
+        Check_Mirror ("collapse by agreement, seed 1", Templates.Rendered (Filled, Letters, True), "la [coco de roso] rosa.");
+        end Test_Criteria;
+
+    procedure Test_Sources is
+        Reader        : Memory_Sources.Memory_Source;
+        File_Reader   : File_Sources.File_Source;
+        File_Letters  : Alphabets.Alphabet;
+        Piece         : Texts.Symbol_Text;
+        Found         : Boolean;
+        Count         : Natural := 0;
+        First_Matches : Boolean := False;
+        begin
+        Memory_Sources.Open (Reader, Corpus, 24, 7);
+        Reader.Next_Piece (Piece, Found);
+        Check (
+            "memory source: the first piece of seed 7",
+            Found and then Texts.Decoded (Piece, Letters) = " la cosa de la costa. el"
+            );
+
+        Texts.Learn_Alphabet (Sample_File, File_Letters);
+        declare
+            Whole : constant Texts.Symbol_Text := Texts.Read_Symbols (Sample_File, File_Letters);
+            begin
+            File_Sources.Open (File_Reader, Sample_File, File_Letters, 100);
+            loop
+                File_Reader.Next_Piece (Piece, Found);
+                exit when not Found;
+                Count := Count + 1;
+                if Count = 1 then
+                    First_Matches := (Piece = Texts.Part (Whole, 1, 100));
+                    end if;
+                end loop;
+            File_Sources.Close (File_Reader);
+            end;
+        Check ("file source: 91 pieces of 100 letters", Count = 91);
+        Check ("file source: the first piece is the start of the file", First_Matches);
+        end Test_Sources;
+
+    procedure Test_Records is
+        Tape  : Records.Tape;
+        Back  : Records.Tape;
+        Packed : Records.Tape;
+        Packed_Size : Natural;
+        Row   : Numbers.Real_Row := Numbers.Zeros (4);
+        Count : Natural;
+        Real  : Long_Float;
+        begin
+        Row.Replace_Element (2, 2.5);
+        Row.Replace_Element (4, -1.0);
+        Records.Write_Word (Tape, "first");
+        Records.Write_Count (Tape, 144);
+        Records.Write_Real (Tape, -0.125);
+        Records.Write_Reals (Tape, Row);
+        Records.Save (Tape, Saved_Tape);
+        Records.Load (Back, Saved_Tape);
+        Ada.Directories.Delete_File (Saved_Tape);
+        Check ("a word comes back from the file", Records.Read_Word (Back) = "first");
+        Count := Records.Read_Count (Back);
+        Check ("a whole number comes back", Count = 144);
+        Real := Records.Read_Real (Back);
+        Check ("a real number comes back exactly", Real = -0.125);
+        Row := Records.Read_Reals (Back);
+        Check (
+            "a sparse row comes back with its zeros",
+            Natural (Row.Length) = 4 and then Row.Element (1) = 0.0
+            and then Row.Element (2) = 2.5 and then Row.Element (4) = -1.0
+            );
+        Records.Save (Tape, Packed_Tape);
+        Records.Load (Packed, Packed_Tape);
+        Packed_Size := Natural (Ada.Directories.Size (Packed_Tape));
+        Ada.Directories.Delete_File (Packed_Tape);
+        Check ("the packed form keeps the same word", Records.Read_Word (Packed) = "first");
+        Count := Records.Read_Count (Packed);
+        Real := Records.Read_Real (Packed);
+        Row := Records.Read_Reals (Packed);
+        Check (
+            "the packed form keeps the same numbers",
+            Count = 144 and then Real = -0.125 and then Natural (Row.Length) = 4
+            and then Row.Element (2) = 2.5 and then Row.Element (4) = -1.0
+            );
+        Check ("the packed form of this tape takes 50 bytes", Packed_Size = 50);
+        Check ("the package name of a brain file", Records.Unit_Name_For ("brains/page.brn") = "Page_Brain");
+        Check ("marks in the file name become underlines", Records.Unit_Name_For ("my-page.2.brn") = "My_Page_2_Brain");
+        end Test_Records;
+
+    procedure Test_Web_Addresses is
+        Base : constant String := "http://test.site/sub/c.html?x=1";
+        begin
+        Check ("a link one folder up", Web_Addresses.Resolved (Base, "../a.html") = "http://test.site/a.html");
+        Check ("a link from the top of the site", Web_Addresses.Resolved (Base, "/index.html") = "http://test.site/index.html");
+        Check ("the part after # is dropped", Web_Addresses.Resolved (Base, "d.html#top") = "http://test.site/sub/d.html");
+        Check ("a link to the same page leads nowhere", Web_Addresses.Resolved (Base, "#top") = "");
+        Check ("a mail link cannot be followed", Web_Addresses.Resolved (Base, "mailto:me@test.site") = "");
+        Check ("a full address gets its final slash", Web_Addresses.Resolved (Base, "http://other.org") = "http://other.org/");
+        Check ("a link that only changes the question", Web_Addresses.Resolved (Base, "?page=2") = "http://test.site/sub/c.html?page=2");
+        Check ("stay-here and go-up parts are worked out", Web_Addresses.Resolved (Base, "./e/../f.html") = "http://test.site/sub/f.html");
+        Check ("going up too far stops at the top", Web_Addresses.Resolved (Base, "../../..") = "http://test.site/");
+        Check ("a link with a space is dropped", Web_Addresses.Resolved (Base, "a b.html") = "");
+        Check ("the host of an address", Web_Addresses.Host_Of ("https://test.site:8080/a/b") = "test.site:8080");
+        Check ("by name: no ending may be a page", Web_Addresses.Kind_By_Name ("http://test.site/wiki/Sea") = Web_Addresses.Page);
+        Check ("by name: a picture, even in capitals", Web_Addresses.Kind_By_Name ("http://test.site/a.PNG?x=1.html") = Web_Addresses.Picture);
+        Check ("by name: a film", Web_Addresses.Kind_By_Name ("http://test.site/clip.mp4") = Web_Addresses.Video);
+        Check ("by name: program code is writing", Web_Addresses.Kind_By_Name ("http://test.site/tool.py") = Web_Addresses.Writing);
+        Check ("by label: a page", Web_Addresses.Kind_By_Label ("Text/HTML; charset=utf-8") = Web_Addresses.Page);
+        Check ("by label: a drawing written as text is writing", Web_Addresses.Kind_By_Label ("image/svg+xml") = Web_Addresses.Writing);
+        Check ("by label: unknown bytes are other", Web_Addresses.Kind_By_Label ("application/octet-stream") = Web_Addresses.Other);
+        Check ("the sense of program code is its ending", Web_Addresses.Sense_Of ("http://test.site/tool.py", Web_Addresses.Writing) = "py");
+        Check ("the sense of a page is page", Web_Addresses.Sense_Of ("http://test.site/a.html", Web_Addresses.Page) = "page");
+        end Test_Web_Addresses;
+
+    Page_Markup : constant Wide_Wide_String :=
+        "<html><head><title>Test &amp; page</title><style>p {color: red}</style>"
+        & "<script>var a = '<p>not text</p>';</script></head><body><!-- a <b>comment</b> -->"
+        & "<h1>Hello   world</h1><p>First <a href=""a.html?x=1&amp;y=2"">link</a> and "
+        & "<A HREF='b.html'>another</A>&nbsp;one &#233; &bogus; AT&T.</p>"
+        & "<img alt=""x"" src=""pic.png""><p>Second<br>third <video src=clip.mp4 controls></video> end</p>"
+        & "<svg><circle/></svg>tail <a>no link</a> <a title=""href=x"" href = c.html >c</a>";
+
+    function Block_Text (
+            Content : in Pages.Page_Content;
+            Index   : in Positive
+            ) return Wide_Wide_String is
+        begin
+        return Wide_Texts.To_Wide_Wide_String (Content.Blocks.Element (Index).Text);
+        end Block_Text;
+
+    function Block_Kind_At (
+            Content : in Pages.Page_Content;
+            Index   : in Positive
+            ) return Pages.Block_Kind is
+        begin
+        return Content.Blocks.Element (Index).Kind;
+        end Block_Kind_At;
+
+    procedure Test_Pages is
+        Content  : constant Pages.Page_Content := Pages.Read (Wide_Texts.To_Unbounded_Wide_Wide_String (Page_Markup));
+        E_Acute  : constant Wide_Wide_Character := Wide_Wide_Character'Val (233);
+        Expected : constant Wide_Wide_String := "First link and another one " & E_Acute & " &bogus; AT&T.";
+        begin
+        Check ("the page is taken apart into 10 blocks", Natural (Content.Blocks.Length) = 10);
+        Check ("the title is the first paragraph", Block_Kind_At (Content, 1) = Pages.Words and then Block_Text (Content, 1) = "Test & page");
+        Check ("runs of spaces count as one", Block_Text (Content, 2) = "Hello world");
+        Check ("letters written by name or number are read", Block_Text (Content, 3) = Expected);
+        Check ("a picture keeps its place and its address", Block_Kind_At (Content, 4) = Pages.Picture and then Block_Text (Content, 4) = "pic.png");
+        Check ("a line break starts a new paragraph", Block_Text (Content, 5) = "Second" and then Block_Text (Content, 6) = "third");
+        Check ("a film keeps its place and its address", Block_Kind_At (Content, 7) = Pages.Video and then Block_Text (Content, 7) = "clip.mp4");
+        Check ("a drawing inside the page keeps its place", Block_Kind_At (Content, 9) = Pages.Drawing);
+        Check ("the last paragraph", Block_Text (Content, 10) = "tail no link c");
+        Check (
+            "three links, as written",
+            Natural (Content.Links.Length) = 3 and then Content.Links.Element (1) = "a.html?x=1&y=2"
+            and then Content.Links.Element (2) = "b.html" and then Content.Links.Element (3) = "c.html"
+            );
+        Check ("the words of the page, one paragraph per line", Wide_Texts.Length (Pages.Text_Of (Content)) = 99);
+        end Test_Pages;
+
+    Line_End : constant Wide_Wide_String := (1 => Wide_Wide_Character'Val (10));
+
+    Rules_Text : constant Wide_Wide_String :=
+        "# rules for the test" & Line_End
+        & "User-agent: otherbot" & Line_End
+        & "Disallow: /" & Line_End
+        & Line_End
+        & "User-agent: *" & Line_End
+        & "Disallow: /private/" & Line_End
+        & "Allow: /private/open/" & Line_End
+        & "Disallow: /*.pdf$" & Line_End
+        & "Disallow: /search?*q=" & Line_End
+        & "Crawl-delay: 5" & Line_End
+        & "Disallow:" & Line_End;
+
+    Our_Rules_Text : constant Wide_Wide_String :=
+        Rules_Text & "User-agent: calipso" & Line_End & "Disallow: /only-us/" & Line_End;
+
+    procedure Test_Robots is
+        Rules : constant Robots.Rule_Set := Robots.Parsed (Wide_Texts.To_Unbounded_Wide_Wide_String (Rules_Text), "Calipso");
+        Named : constant Robots.Rule_Set := Robots.Parsed (Wide_Texts.To_Unbounded_Wide_Wide_String (Our_Rules_Text), "Calipso");
+        begin
+        Check ("the top of the site is allowed", Robots.Allows (Rules, "/"));
+        Check ("a forbidden folder", not Robots.Allows (Rules, "/private/x"));
+        Check ("the longest rule that fits decides", Robots.Allows (Rules, "/private/open/x"));
+        Check ("a rule with * and $: ends in .pdf", not Robots.Allows (Rules, "/a/b.pdf"));
+        Check ("a rule with $ does not fit a longer path", Robots.Allows (Rules, "/a/b.pdfx"));
+        Check ("a rule with * in the middle", not Robots.Allows (Rules, "/search?a=1&q=2"));
+        Check ("the same rule, when the end is missing", Robots.Allows (Rules, "/search?a=1"));
+        Check ("the site asks for 5 seconds between requests", Robots.Delay_Of (Rules) = 5.0);
+        Check (
+            "rules that name us replace the rules for everybody",
+            Robots.Allows (Named, "/private/x") and then not Robots.Allows (Named, "/only-us/x")
+            );
+        Check ("no rules at all: everything is allowed", Robots.Allows (Robots.Allow_Everything, "/x"));
+        Check ("rules that could not be read: nothing is allowed", not Robots.Allows (Robots.Allow_Nothing, "/x"));
+        end Test_Robots;
+
+    procedure Test_Web_Sources is
+        Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
+        Options    : Web_Sources.Settings;
+        Site       : Folder_Fetchers.Folder_Fetcher;
+        Reader     : Web_Sources.Web_Source;
+        Piece      : Texts.Symbol_Text;
+        Found      : Boolean;
+        Count      : Natural := 0;
+        Good_Start : Boolean := False;
+        Counts     : Web_Sources.Tally;
+        Opening    : constant Wide_Wide_String :=
+            "The little test site" & Line_End & "The little test site" & Line_End & "This site is small";
+        begin
+        Check ("the common alphabet has 144 symbols", Alphabets.Size (Common) = 144);
+        Options.Pause := 0.0;
+        Folder_Fetchers.Prepare (Site, Test_Site, Site_Folder);
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/index.html");
+        loop
+            Reader.Next_Piece (Piece, Found);
+            exit when not Found;
+            Count := Count + 1;
+            if Count = 1 then
+                Good_Start := Texts.Decoded (Piece, Common) (1 .. Opening'Length) = Opening;
+                end if;
+            end loop;
+        Ada.Directories.Delete_File (Page_Work_File);
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check ("the site gives 17 pieces of 64 letters", Count = 17);
+        Check ("the first piece starts with the title", Good_Start);
+        Check ("5 pages asked for, 4 read, 1113 letters", Counts.Asked = 5 and then Counts.Read = 4 and then Counts.Letters = 1_113);
+        Check ("the private page is refused by the site's rules", Counts.Refused = 1);
+        Check (
+            "the file with no ending is asked for, and is not text",
+            Counts.Not_Text = 1 and then Web_Sources.Find_Count (Reader, Web_Addresses.Other) = 1
+            );
+        Check ("nothing failed", Counts.Failed = 0);
+        Check (
+            "files that are not pages are filed by kind, never asked for",
+            Web_Sources.Find_Count (Reader, Web_Addresses.Writing) = 2
+            and then Web_Sources.Find_Count (Reader, Web_Addresses.Picture) = 1
+            and then Web_Sources.Find_Count (Reader, Web_Addresses.Video) = 1
+            and then Web_Sources.Find_Count (Reader, Web_Addresses.Sound) = 1
+            );
+        Check (
+            "a page linked again is not listed again: it gets mentions",
+            Web_Sources.Mentions_Of (Reader, Test_Site & "/index.html") = 4
+            );
+        Check ("the other site was never listed", Web_Sources.Mentions_Of (Reader, "http://elsewhere.example/") = 0);
+
+        Options.List_Size := 2;
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/index.html");
+        loop
+            Reader.Next_Piece (Piece, Found);
+            exit when not Found;
+            end loop;
+        Ada.Directories.Delete_File (Page_Work_File);
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check ("a waiting list of 2: the 4 pages are still read", Counts.Asked = 4 and then Counts.Read = 4);
+        Check (
+            "a waiting list of 2: 3 links are left out",
+            Counts.Left_Out = 3 and then Web_Sources.Waiting_Count (Reader) = 0
+            );
+        end Test_Web_Sources;
 
     begin
     Prepare;
@@ -403,7 +861,16 @@ procedure Calipso_Tests is
     Run_Group ("Collapse", Test_Collapsing'Access);
     Run_Group ("Repair and grow", Test_Repairing'Access);
     Run_Group ("Blind spots", Test_Blind_Spots'Access);
-    Run_Group ("Voting brain", Test_Voting_Oracles'Access);
+    Run_Group ("Bounded memory", Test_Bounded_Memory'Access);
+    Run_Group ("Neurons that measure distance", Test_Basis_Neurons'Access);
+    Run_Group ("Brain files", Test_Records'Access);
+    Run_Group ("Brains", Test_Brains'Access);
+    Run_Group ("Criteria", Test_Criteria'Access);
+    Run_Group ("Sources", Test_Sources'Access);
+    Run_Group ("Web addresses", Test_Web_Addresses'Access);
+    Run_Group ("Pages", Test_Pages'Access);
+    Run_Group ("Site rules", Test_Robots'Access);
+    Run_Group ("Web source", Test_Web_Sources'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

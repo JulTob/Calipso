@@ -21,7 +21,8 @@ jobs:
           sudo apt-get install -y gnat gprbuild
 
       - name: Build
-        run: gprbuild -p -P calipso.gpr
+        run: gprbuild -p -k -P calipso.gpr
+        #  -k : keep going after an error, so that one run reports every problem.
 
       - name: Tests
         run: ./bin/calipso_tests
@@ -40,12 +41,113 @@ jobs:
           cat exam_ada.txt
           diff exam_ada.txt exam_python.txt
 
-      - name: Training with blind spots in Ada and in Python must give the same figures
+      - name: A brain studies, is saved, carries on and is compared - the same in Ada and in Python
         run: |
-          time ./bin/calipso_train data/sample_es.txt 1500 > train_ada.txt
-          time python3 reference/train.py data/sample_es.txt 1500 > train_python.txt
-          cat train_ada.txt
-          diff train_ada.txt train_python.txt
+          ./bin/calipso_brain study brain_ada.brn data/sample_es.txt 300 bias+position+decay > brain_ada_log.txt
+          ./bin/calipso_brain study brain_ada.brn data/sample_es.txt 300 >> brain_ada_log.txt
+          ./bin/calipso_brain study mixed_ada.brn data/sample_es.txt 200 counting+bias+harmonic >> brain_ada_log.txt
+          python3 reference/brain.py study brain_python.brn data/sample_es.txt 300 bias+position+decay > brain_python_log.txt
+          python3 reference/brain.py study brain_python.brn data/sample_es.txt 300 >> brain_python_log.txt
+          python3 reference/brain.py study mixed_python.brn data/sample_es.txt 200 counting+bias+harmonic >> brain_python_log.txt
+          cat brain_ada_log.txt
+          sed -e 's/_python/_ada/g' brain_python_log.txt > brain_python_as_ada.txt
+          diff brain_ada_log.txt brain_python_as_ada.txt
+
+      - name: Each language can read the brains the other one saved
+        run: |
+          ./bin/calipso_brain compare data/sample_es.txt brain_python.brn mixed_python.brn > cross_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_python.brn mixed_python.brn > cross_python.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.brn mixed_ada.brn > own_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_ada.brn mixed_ada.brn > own_python.txt
+          cat cross_ada.txt
+          diff cross_ada.txt cross_python.txt
+          diff own_ada.txt own_python.txt
+
+      - name: Packed brains (.zmb) - smaller, exact, and read by both languages
+        run: |
+          ./bin/calipso_brain copy brain_ada.brn brain_ada.zmb
+          ./bin/calipso_brain copy mixed_ada.brn mixed_ada.zmb
+          python3 reference/brain.py copy brain_python.brn brain_python.zmb
+          python3 reference/brain.py copy mixed_python.brn mixed_python.zmb
+          ls -l brain_ada.brn brain_ada.zmb mixed_ada.brn mixed_ada.zmb
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.brn mixed_ada.brn | grep hidden > text_form.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.zmb mixed_ada.zmb | grep hidden > packed_form.txt
+          diff text_form.txt packed_form.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_python.zmb mixed_python.zmb brain_ada.zmb mixed_ada.zmb > packed_ada.txt
+          python3 reference/brain.py compare data/sample_es.txt brain_python.zmb mixed_python.zmb brain_ada.zmb mixed_ada.zmb > packed_python.txt
+          cat packed_ada.txt
+          diff packed_ada.txt packed_python.txt
+          ./bin/calipso_brain copy brain_ada.zmb back_ada.brn
+          ./bin/calipso_brain compare data/sample_es.txt back_ada.brn | grep hidden > back_form.txt
+          ./bin/calipso_brain compare data/sample_es.txt brain_ada.brn | grep hidden > first_form.txt
+          diff first_form.txt back_form.txt
+
+      - name: A saved brain is also Ada - compile one into a program and compare
+        run: |
+          ./bin/calipso_brain study tests/frozen/frozen.brn data/sample_es.txt 20 counting+bias+position
+          head -30 tests/frozen/frozen.brn
+          wc -l -c tests/frozen/frozen.brn
+          time gprbuild -p -q -P tests/frozen/frozen.gpr
+          ./tests/frozen/bin/frozen_check tests/frozen/frozen.brn
+          ./tests/frozen/bin/frozen_check freshest tests/frozen/frozen.brn | tee freshest_same.txt
+          grep -q "The freshest brain has 20 lessons" freshest_same.txt
+          ./bin/calipso_brain study tests/frozen/frozen.brn data/sample_es.txt 10 > /dev/null
+          ./tests/frozen/bin/frozen_check freshest tests/frozen/frozen.brn | tee freshest_file.txt
+          grep -q "Inside the program: 20 lessons. The freshest brain has 30 lessons" freshest_file.txt
+
+      - name: The robot reads a small web site over real HTTP - the same in Ada and in Python
+        run: |
+          ./bin/calipso_serve tests/site 8765 > site_server.log 2>&1 &
+          sleep 1
+          ./bin/calipso_crawl web_ada.brn tests/start_list.txt pages=10 > crawl_ada.txt
+          python3 reference/crawl.py web_python.brn tests/start_list.txt pages=10 > crawl_python.txt
+          ./bin/calipso_crawl small_ada.zmb tests/start_list.txt pages=10 list=2 recipe=bias+decay:6:2 > small_ada.txt
+          python3 reference/crawl.py small_python.zmb tests/start_list.txt pages=10 list=2 recipe=bias+decay:6:2 > small_python.txt
+          cat crawl_ada.txt
+          cat web_ada.brn.finds.txt
+          echo "What the site was asked for:"
+          cat site_server.log
+          sed -e 's/_python/_ada/g' crawl_python.txt > crawl_python_as_ada.txt
+          diff crawl_ada.txt crawl_python_as_ada.txt
+          diff web_ada.brn.finds.txt web_python.brn.finds.txt
+          echo "With a waiting list of only 2 places:"
+          cat small_ada.txt
+          sed -e 's/_python/_ada/g' small_python.txt > small_python_as_ada.txt
+          diff small_ada.txt small_python_as_ada.txt
+
+      - name: The panel - look, check the rules, train, hide and rebuild
+        run: |
+          SITE="http%3A%2F%2F127.0.0.1%3A8765"
+          PANEL="http://127.0.0.1:8080"
+          ./bin/calipso_panel panel_brains 8080 > panel.log 2>&1 &
+          sleep 1
+          curl -s "$PANEL/" -o panel_1_start.html
+          curl -s "$PANEL/view?address=$SITE%2Findex.html" -o panel_2_view.html
+          curl -s -X POST "$PANEL/train" -o panel_3_trained.html
+          curl -s "$PANEL/view?address=$SITE%2Fa.html" -o /dev/null
+          curl -s -X POST "$PANEL/train" -o /dev/null
+          curl -s "$PANEL/view?address=$SITE%2Fb.html" -o /dev/null
+          curl -s -X POST "$PANEL/train" -o /dev/null
+          curl -s "$PANEL/view?address=$SITE%2Fsub%2Fc.html" -o /dev/null
+          curl -s "$PANEL/hide?block=4" -o panel_4_rebuilt.html
+          curl -s "$PANEL/hide?block=4&part=half" -o panel_4b_half.html
+          curl -s "$PANEL/view?address=$SITE%2Fprivate%2Fsecret.html" -o panel_5_refused.html
+          curl -s "$PANEL/view?address=$SITE%2Fpicture.png" -o panel_6_picture.html
+          curl -s "$PANEL/view?address=$SITE%2Fnotes.txt" -o panel_7_notes.html
+          curl -s -X POST "$PANEL/train" -o /dev/null
+          curl -s "$PANEL/quit"
+          curl -s "http://127.0.0.1:8765/__stop"
+          echo
+          cat panel.log
+          ls -l panel_brains
+          grep -q "Allowed: robots may fetch this address" panel_2_view.html
+          grep -q "lessons from this page" panel_3_trained.html
+          grep -q "What the brain built in its place" panel_4_rebuilt.html
+          grep -q "Not allowed: robots may not fetch this address" panel_5_refused.html
+          grep -q "There is no brain for that kind of file yet" panel_6_picture.html
+          test -f panel_brains/page.brn
+          test -f panel_brains/txt.brn
+          for page in panel_*.html; do echo "=====BEGIN $page"; cat "$page"; echo; echo "=====END $page"; done
 
   reference:
     name: Python reference

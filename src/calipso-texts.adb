@@ -1,3 +1,6 @@
+with Ada.IO_Exceptions;
+with Ada.Streams;
+with Ada.Streams.Stream_IO;
 with Ada.Strings.UTF_Encoding;
 with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
 with Ada.Text_IO;
@@ -67,6 +70,47 @@ package body Calipso.Texts is
         begin
         For_Each_Character (File_Name, Note_Character'Access);
         end Learn_Alphabet;
+
+    function Bytes_Of (
+            File_Name : in String
+            ) return Ada.Strings.Unbounded.Unbounded_String is
+        use Ada.Streams;
+        File    : Stream_IO.File_Type;
+        Buffer  : Stream_Element_Array (1 .. 4_096);
+        Last    : Stream_Element_Offset;
+        Content : Ada.Strings.Unbounded.Unbounded_String;
+        begin
+        Stream_IO.Open (File, Stream_IO.In_File, File_Name);
+        loop
+            Stream_IO.Read (File, Buffer, Last);
+            for Index in 1 .. Last loop
+                Ada.Strings.Unbounded.Append (Content, Character'Val (Buffer (Index)));
+                end loop;
+            exit when Last < Buffer'Last;
+            end loop;
+        Stream_IO.Close (File);
+        return Content;
+        exception
+        when Ada.IO_Exceptions.Name_Error | Ada.IO_Exceptions.Use_Error =>
+            raise Reading_Error with "cannot read the file " & File_Name;
+        end Bytes_Of;
+
+    function Whole_Text (
+            File_Name : in String
+            ) return Wide_Text is
+        Gathered : Wide_Text;
+
+        procedure Keep_Character (
+                Char : in Wide_Wide_Character
+                ) is
+            begin
+            Ada.Strings.Wide_Wide_Unbounded.Append (Gathered, Char);
+            end Keep_Character;
+
+        begin
+        For_Each_Character (File_Name, Keep_Character'Access);
+        return Gathered;
+        end Whole_Text;
 
     function Read_Symbols (
             File_Name : in String;

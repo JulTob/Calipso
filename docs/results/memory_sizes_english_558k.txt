@@ -1,0 +1,46 @@
+How big must the bounded count memory be? One counting neuron, 2000 lessons on the
+English corpus (558 k letters), then the usual exam. Exact memory needs 132,431 counters.
+
+BEFORE the check numbers (a counter shared blindly by every fragment that lands on it):
+capacity 0 counters in use 132431
+  hidden 15 %:  68.3 %   1.338 nats
+  hidden 50 %:  41.1 %   2.198 nats
+  hidden 85 %:  24.2 %   2.832 nats
+capacity 65536 counters in use 56909
+  hidden 15 %:  10.1 %   4.343 nats
+  hidden 50 %:  22.7 %   3.186 nats
+  hidden 85 %:  23.0 %   2.939 nats
+capacity 262144 counters in use 104067
+  hidden 15 %:  15.6 %   3.831 nats
+  hidden 50 %:  27.6 %   2.865 nats
+  hidden 85 %:  23.7 %   2.881 nats
+capacity 1048576 counters in use 124431
+  hidden 15 %:  27.2 %   3.169 nats
+  hidden 50 %:  31.2 %   2.601 nats
+  hidden 85 %:  24.0 %   2.850 nats
+capacity 4194304 counters in use 130383
+  hidden 15 %:  41.3 %   2.352 nats
+  hidden 50 %:  35.4 %   2.399 nats
+  hidden 85 %:  24.1 %   2.837 nats
+capacity 16777216 counters in use 131962
+  hidden 15 %:  57.9 %   1.667 nats
+  hidden 50 %:  38.5 %   2.270 nats
+  hidden 85 %:  24.1 %   2.834 nats
+
+AFTER the check numbers (each counter knows whose it is):
+capacity 65536 counters in use 56909
+  hidden 15 %:  62.2 %   1.610 nats
+  hidden 50 %:  40.2 %   2.345 nats
+  hidden 85 %:  24.0 %   2.862 nats
+capacity 262144 counters in use 104067
+  hidden 15 %:  66.4 %   1.377 nats
+  hidden 50 %:  41.1 %   2.233 nats
+  hidden 85 %:  24.3 %   2.835 nats
+capacity 1048576 counters in use 124431
+  hidden 15 %:  67.2 %   1.357 nats
+  hidden 50 %:  41.1 %   2.210 nats
+  hidden 85 %:  24.2 %   2.831 nats
+capacity 4194304 counters in use 130383
+  hidden 15 %:  68.5 %   1.337 nats
+  hidden 50 %:  41.1 %   2.203 nats
+  hidden 85 %:  24.2 %   2.832 nats

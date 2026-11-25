@@ -10,10 +10,12 @@
 --  widen it one neighbour at a time, alternating left and right. Each
 --  wider window corrects the opinion of the previous one.
 
+
 with Calipso.Canvases;
 with Calipso.Distributions;
 with Calipso.Fragment_Counts;
 with Calipso.Oracles;
+with Calipso.Records;
 with Calipso.Texts;
 
 package Calipso.Counting_Oracles is
@@ -23,13 +25,46 @@ package Calipso.Counting_Oracles is
 
     type Counting_Oracle is new Oracles.Oracle with private;
 
+    procedure Prepare (
+            Self         : in out Counting_Oracle;
+            Letter_Count : in     Symbol;
+            Longest      : in     Positive := Default_Longest;
+            Capacity     : in     Natural := 0
+            );
+    --# Leaves the brain blank. Capacity 0 = exact memory; more = bounded memory.
+
+    procedure Study (
+            Self : in out Counting_Oracle;
+            Text : in     Texts.Symbol_Text
+            );
+    --# Adds what this text teaches to what the brain already knew.
+
+    function Capacity (
+            Self : in Counting_Oracle
+            ) return Natural;
+
+    function Longest_Of (
+            Self : in Counting_Oracle
+            ) return Positive;
+    --# The longest fragment it counts: its window.
+
+    procedure Save (
+            Self : in     Counting_Oracle;
+            Tape : in out Records.Tape
+            );
+
+    procedure Load (
+            Self : in out Counting_Oracle;
+            Tape : in out Records.Tape
+            );
+
     procedure Train (
             Self         : in out Counting_Oracle;
             Text         : in     Texts.Symbol_Text;
             Letter_Count : in     Symbol;
             Longest      : in     Positive := Default_Longest
             );
-    --# "Training" this brain is just counting fragments.
+    --# "Training" this brain is just counting fragments: Prepare, then Study.
 
     function Fragment_Total (
             Self : in Counting_Oracle

@@ -1,3 +1,4 @@
+
 package body Calipso.Counting_Oracles is
 
     use type Distributions.Distribution;
@@ -85,18 +86,70 @@ package body Calipso.Counting_Oracles is
     --# were seen in this window: if all sorts of letters followed this context,
     --# I trust it less and trust what I already thought more.
 
+    procedure Prepare (
+            Self         : in out Counting_Oracle;
+            Letter_Count : in     Symbol;
+            Longest      : in     Positive := Default_Longest;
+            Capacity     : in     Natural := 0
+            ) is
+        begin
+        Self.Letter_Count := Letter_Count;
+        Self.Longest := Longest;
+        Fragment_Counts.Limit (Self.Table, Capacity);
+        end Prepare;
+
+    procedure Study (
+            Self : in out Counting_Oracle;
+            Text : in     Texts.Symbol_Text
+            ) is
+        begin
+        Fragment_Counts.Learn (Self.Table, Text, Self.Longest);
+        end Study;
+
+    function Capacity (
+            Self : in Counting_Oracle
+            ) return Natural is
+        begin
+        return Fragment_Counts.Capacity_Of (Self.Table);
+        end Capacity;
+
+    function Longest_Of (
+            Self : in Counting_Oracle
+            ) return Positive is
+        begin
+        return Self.Longest;
+        end Longest_Of;
+
+    procedure Save (
+            Self : in     Counting_Oracle;
+            Tape : in out Records.Tape
+            ) is
+        begin
+        Records.Write_Count (Tape, Natural (Self.Letter_Count));
+        Records.Write_Count (Tape, Self.Longest);
+        Fragment_Counts.Save (Self.Table, Tape);
+        end Save;
+
+    procedure Load (
+            Self : in out Counting_Oracle;
+            Tape : in out Records.Tape
+            ) is
+        Letter_Count : constant Natural := Records.Read_Count (Tape);
+        Longest      : constant Natural := Records.Read_Count (Tape);
+        begin
+        Prepare (Self, Symbol (Letter_Count), Longest);
+        Fragment_Counts.Load (Self.Table, Tape);
+        end Load;
+
     procedure Train (
             Self         : in out Counting_Oracle;
             Text         : in     Texts.Symbol_Text;
             Letter_Count : in     Symbol;
             Longest      : in     Positive := Default_Longest
             ) is
-        Empty_Table : Fragment_Counts.Count_Table;
         begin
-        Self.Letter_Count := Letter_Count;
-        Self.Longest := Longest;
-        Self.Table := Empty_Table;
-        Fragment_Counts.Learn (Self.Table, Text, Longest);
+        Prepare (Self, Letter_Count, Longest);
+        Study (Self, Text);
         end Train;
 
     function Fragment_Total (

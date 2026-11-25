@@ -26,6 +26,9 @@ def For_Each_Character(
     lines = content.split(LINE_FEED)
     if len(lines) > 0 and lines[-1] == "":
         lines.pop()
+    if len(lines) > 0 and lines[-1] == "":
+        lines.pop()
+        #-- Mirror note: Ada.Text_IO does not read one empty line at the very end of a file.
     for line in lines:
         for char in line:
             if char != CARRIAGE_RETURN:
@@ -42,6 +45,19 @@ def Learn_Alphabet(
         alphabets.Include(letters, char)
 
     For_Each_Character(file_name, Note_Character)
+
+
+def Whole_Text(
+        file_name: str
+        ) -> str:
+    #-- All the letters of a file, as they are.
+    gathered = []
+
+    def Keep_Character(char):
+        gathered.append(char)
+
+    For_Each_Character(file_name, Keep_Character)
+    return "".join(gathered)
 
 
 def Read_Symbols(
