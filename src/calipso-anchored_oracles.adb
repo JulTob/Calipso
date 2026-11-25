@@ -28,14 +28,15 @@ package body Calipso.Anchored_Oracles is
             Size   : in Symbol
             ) return Distributions.Distribution is
         Sure   : constant Long_Float := Long_Float (Toward.Sure);
-        Others : constant Long_Float := (1.0 - Sure) / Long_Float (Size - 1);
+        Share  : constant Long_Float := (1.0 - Sure) / Long_Float (Size - 1);
+        --# What each of the other symbols gets.
         Memory : Distributions.Distribution := Distributions.Zero (Size);
         begin
         for Value in 1 .. Size loop
             if Value = Toward.Held then
                 Distributions.Set_Weight (Memory, Value, Sure);
             else
-                Distributions.Set_Weight (Memory, Value, Others);
+                Distributions.Set_Weight (Memory, Value, Share);
                 end if;
             end loop;
         return Memory;
