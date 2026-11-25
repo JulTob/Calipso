@@ -12,7 +12,7 @@ project Calipso is
     for Object_Dir use "obj";
     for Exec_Dir use "bin";
     for Main use ("calipso_demo.adb", "calipso_exam.adb", "calipso_brain.adb", "calipso_crawl.adb",
-                  "calipso_panel.adb", "calipso_serve.adb", "calipso_write.adb", "calipso_tests.adb");
+                  "calipso_panel.adb", "calipso_serve.adb", "calipso_write.adb", "calipso_settle.adb", "calipso_tests.adb");
 
     package Compiler is
         for Default_Switches ("Ada") use (

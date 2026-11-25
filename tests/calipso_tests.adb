@@ -17,12 +17,14 @@ with Ada.Strings.Unbounded;
 with Ada.Strings.Wide_Wide_Unbounded;
 
 with Calipso.Alphabets;
+with Calipso.Anchored_Oracles;
 with Calipso.Basis_Neurons;
 with Calipso.Bias_Neurons;
 with Calipso.Blind_Spots;
 with Calipso.Boxed_Oracles;
 with Calipso.Brains;
 with Calipso.Canvases;
+with Calipso.Certainties;
 with Calipso.Collapsing;
 with Calipso.Console;
 with Calipso.Counting_Neurons;
@@ -44,6 +46,7 @@ with Calipso.Random_Sources;
 with Calipso.Records;
 with Calipso.Repairing;
 with Calipso.Robots;
+with Calipso.Settling;
 with Calipso.Templates;
 with Calipso.Texts;
 with Calipso.Tokens;
@@ -57,6 +60,7 @@ procedure Calipso_Tests is
     use type Ada.Containers.Hash_Type;
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
+    use type Certainties.Certainty;
     use type Kinds.Kind_Family;
     use type Pages.Block_Kind;
     use type Texts.Symbol_Text;
@@ -957,6 +961,141 @@ procedure Calipso_Tests is
             end;
         end Test_Pyramids;
 
+    procedure Test_Certainties is
+        begin
+        Check (
+            "on the signed dial, +1 is right, 0 is no idea and -1 is wrong",
+            Certainties.Certainty_Of (Certainties.Surely_Right, 100) = 1.0
+            and then Certainties.Certainty_Of (Certainties.No_Idea, 100) = Certainties.Chance_Level (100)
+            and then Certainties.Certainty_Of (Certainties.Surely_Wrong, 100) = 0.0
+            );
+        Check (
+            "no idea is one chance in the size of the alphabet",
+            abs (Long_Float (Certainties.Chance_Level (100)) - 0.01) < 1.0E-12
+            );
+        Check (
+            "half way up the signed dial is half way from no idea to right",
+            abs (Long_Float (Certainties.Certainty_Of (0.5, 100)) - 0.505) < 1.0E-12
+            );
+        Check (
+            "half way down the signed dial is half way from no idea to wrong",
+            abs (Long_Float (Certainties.Certainty_Of (-0.5, 100)) - 0.005) < 1.0E-12
+            );
+        Check (
+            "the two scales turn into each other and back",
+            abs (Long_Float (Certainties.Signed_Of (0.505, 100)) - 0.5) < 1.0E-12
+            and then abs (Long_Float (Certainties.Signed_Of (0.005, 100)) + 0.5) < 1.0E-12
+            );
+        end Test_Certainties;
+
+    procedure Test_Anchored_Oracles is
+        Belief : Distributions.Distribution := Distributions.Zero (4);
+        begin
+        Distributions.Set_Weight (Belief, 1, 0.1);
+        Distributions.Set_Weight (Belief, 2, 0.5);
+        Distributions.Set_Weight (Belief, 3, 0.3);
+        Distributions.Set_Weight (Belief, 4, 0.1);
+        Check (
+            "a sure memory pulls the opinion toward the symbol the cell had",
+            abs (Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 0.9)), 3)
+                 - 0.9204545454545453) < 1.0E-12
+            );
+        Check (
+            "a certainty of 1 keeps the symbol whatever the brain thinks",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 1.0)), 3) = 1.0
+            );
+        Check (
+            "a certainty of 0 forbids the symbol and leaves the rest to the brain",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 0.0)), 3) = 0.0
+            and then abs (Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 0.0)), 2)
+                          - 0.7142857142857143) < 1.0E-12
+            );
+        Check (
+            "no idea changes nothing: on the signed dial that is 0",
+            abs (Distributions.Weight_Of (
+                     Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, Certainties.No_Idea, 4)), 3
+                     ) - 0.3) < 1.0E-12
+            );
+        Check (
+            "a free cell passes the opinion untouched",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Free_Anchor), 2) = 0.5
+            );
+        Distributions.Set_Weight (Belief, 3, 0.0);
+        Check (
+            "sure of a symbol the brain denies: the memory decides alone",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 1.0)), 3) = 1.0
+            );
+        end Test_Anchored_Oracles;
+
+    procedure Settle_Text (
+            Speller : in     Counting_Oracles.Counting_Oracle;
+            Letters : in     Alphabets.Alphabet;
+            Symbols : in     Texts.Symbol_Text;
+            Anchors : in     Anchored_Oracles.Anchor_List;
+            Result  :    out Texts.Wide_Text;
+            Outcome :    out Settling.Report
+            ) is
+        Board : Canvases.Canvas := Settling.Written (Symbols);
+        Final : Texts.Symbol_Text;
+        begin
+        Settling.Settle (Board, Speller, Anchors, Outcome);
+        for Position in 1 .. Canvases.Length (Board) loop
+            Final.Append (Canvases.Symbol_At (Board, Position));
+            end loop;
+        Result := Wide_Texts.To_Unbounded_Wide_Wide_String (Texts.Decoded (Final, Letters));
+        end Settle_Text;
+    --# Writes the symbols on a canvas, settles it, and gives back the text and the report.
+
+    procedure Test_Settling is
+        Letters : Alphabets.Alphabet;
+        Speller : Counting_Oracles.Counting_Oracle;
+        Size    : Symbol;
+        Symbols : Texts.Symbol_Text;
+        Anchors : Anchored_Oracles.Anchor_List;
+        Result  : Texts.Wide_Text;
+        Outcome : Settling.Report;
+        begin
+        Texts.Learn_Alphabet (Pyramid_Corpus, Letters);
+        Size := Alphabets.Size (Letters);
+        Counting_Oracles.Train (Speller, Texts.Read_Symbols (Pyramid_Corpus, Letters), Size);
+        Check ("the alphabet of the sample has 51 symbols", Size = 51);
+
+        Symbols := Texts.Encoded ("En la boca vixen muchas bactemias.", Letters);
+        Anchors := Settling.Even_Anchors (Symbols, Certainties.Certainty_Of (0.99, Size));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "two wrong letters nobody pointed at are found and mended",
+            Wide_Texts.To_Wide_Wide_String (Result) = "En la boca viven muchas bacterias."
+            and then Outcome.Passes = 2 and then Outcome.Changes = 2 and then Outcome.Is_Settled
+            );
+
+        Anchors := Settling.Even_Anchors (Symbols, Certainties.Certainty_Of (Certainties.No_Idea, Size));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "with no idea of any letter the whole text is rewritten",
+            Wide_Texts.To_Wide_Wide_String (Result) = "ue se hacerse en muchos dos y la v"
+            and then Outcome.Passes = 7 and then Outcome.Changes = 32 and then Outcome.Is_Settled
+            );
+
+        Symbols := Texts.Encoded ("En la boca vixen muchas bacterias.", Letters);
+        Anchors := Settling.Even_Anchors (Symbols, 1.0);
+        Anchors.Replace_Element (14, Anchored_Oracles.Anchor_Of (Symbols.Element (14), Certainties.Surely_Wrong, Size));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "a letter marked surely wrong is the only one that changes",
+            Wide_Texts.To_Wide_Wide_String (Result) = "En la boca viven muchas bacterias." and then Outcome.Changes = 1
+            );
+
+        Symbols := Texts.Encoded ("Los patos duermen mucho.", Letters);
+        Anchors := Settling.Even_Anchors (Symbols, Certainties.Certainty_Of (0.5, Size));
+        Anchors.Replace_Element (5, Anchored_Oracles.Anchor_Of (Symbols.Element (5), 1.0));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "a pinned letter stays where it was put while a looser neighbour moves",
+            Wide_Texts.To_Wide_Wide_String (Result) = "Los patos duermen muche." and then Outcome.Changes = 1
+            );
+        end Test_Settling;
+
     procedure Test_Web_Sources is
         Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
         Options    : Web_Sources.Settings;
@@ -1076,6 +1215,9 @@ procedure Calipso_Tests is
     Run_Group ("Kinds of token", Test_Kinds'Access);
     Run_Group ("Boxed oracle", Test_Boxed_Oracles'Access);
     Run_Group ("Pyramid and writers", Test_Pyramids'Access);
+    Run_Group ("The dial", Test_Certainties'Access);
+    Run_Group ("Anchored oracle", Test_Anchored_Oracles'Access);
+    Run_Group ("Settling", Test_Settling'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

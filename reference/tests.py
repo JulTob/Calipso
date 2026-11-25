@@ -11,12 +11,14 @@ import sys
 
 from calipso_ref import UNKNOWN
 from calipso_ref import alphabets
+from calipso_ref import anchored_oracles
 from calipso_ref import basis_neurons
 from calipso_ref import bias_neurons
 from calipso_ref import blind_spots
 from calipso_ref import boxed_oracles
 from calipso_ref import brains
 from calipso_ref import canvases
+from calipso_ref import certainties
 from calipso_ref import collapsing
 from calipso_ref import counting_neurons
 from calipso_ref import counting_oracles
@@ -32,6 +34,7 @@ from calipso_ref import random_sources
 from calipso_ref import records
 from calipso_ref import repairing
 from calipso_ref import robots
+from calipso_ref import settling
 from calipso_ref import sources
 from calipso_ref import templates
 from calipso_ref import texts
@@ -782,6 +785,85 @@ def Test_Pyramids(fixture: Fixture) -> None:
                  writers.Pyramid_Writer(plan, speller, letters, pyramids.PICK), 44, 94546)
 
 
+def Test_Certainties(fixture: Fixture) -> None:
+    Check(fixture, "on the signed dial, +1 is right, 0 is no idea and -1 is wrong",
+          certainties.Certainty_Of(certainties.SURELY_RIGHT, 100) == 1.0
+          and certainties.Certainty_Of(certainties.NO_IDEA, 100) == certainties.Chance_Level(100)
+          and certainties.Certainty_Of(certainties.SURELY_WRONG, 100) == 0.0)
+    Check(fixture, "no idea is one chance in the size of the alphabet", abs(certainties.Chance_Level(100) - 0.01) < 1.0e-12)
+    Check(fixture, "half way up the signed dial is half way from no idea to right",
+          abs(certainties.Certainty_Of(0.5, 100) - 0.505) < 1.0e-12)
+    Check(fixture, "half way down the signed dial is half way from no idea to wrong",
+          abs(certainties.Certainty_Of(-0.5, 100) - 0.005) < 1.0e-12)
+    Check(fixture, "the two scales turn into each other and back",
+          abs(certainties.Signed_Of(0.505, 100) - 0.5) < 1.0e-12 and abs(certainties.Signed_Of(0.005, 100) + 0.5) < 1.0e-12)
+
+
+def Test_Anchored_Oracles(fixture: Fixture) -> None:
+    belief = distributions.Zero(4)
+    distributions.Set_Weight(belief, 1, 0.1)
+    distributions.Set_Weight(belief, 2, 0.5)
+    distributions.Set_Weight(belief, 3, 0.3)
+    distributions.Set_Weight(belief, 4, 0.1)
+    pulled = anchored_oracles.Pulled
+
+    def weight(anchor, symbol):
+        return distributions.Weight_Of(pulled(belief, anchor), symbol)
+
+    Check(fixture, "a sure memory pulls the opinion toward the symbol the cell had",
+          abs(weight(anchored_oracles.Anchor_Of(3, 0.9), 3) - 0.9204545454545453) < 1.0e-12)
+    Check(fixture, "a certainty of 1 keeps the symbol whatever the brain thinks", weight(anchored_oracles.Anchor_Of(3, 1.0), 3) == 1.0)
+    Check(fixture, "a certainty of 0 forbids the symbol and leaves the rest to the brain",
+          weight(anchored_oracles.Anchor_Of(3, 0.0), 3) == 0.0
+          and abs(weight(anchored_oracles.Anchor_Of(3, 0.0), 2) - 0.7142857142857143) < 1.0e-12)
+    Check(fixture, "no idea changes nothing: on the signed dial that is 0",
+          abs(weight(anchored_oracles.Signed_Anchor_Of(3, certainties.NO_IDEA, 4), 3) - 0.3) < 1.0e-12)
+    Check(fixture, "a free cell passes the opinion untouched", weight(anchored_oracles.Free_Anchor(), 2) == 0.5)
+    distributions.Set_Weight(belief, 3, 0.0)
+    Check(fixture, "sure of a symbol the brain denies: the memory decides alone", weight(anchored_oracles.Anchor_Of(3, 1.0), 3) == 1.0)
+
+
+def Settle_Text(speller, letters, symbols, anchors):
+    #-- Writes the symbols on a canvas, settles it, and gives back the text and the report.
+    board = settling.Written(symbols)
+    outcome = settling.Settle(board, speller, anchors)
+    final = [canvases.Symbol_At(board, position) for position in range(0, canvases.Length(board))]
+    return texts.Decoded(final, letters), outcome
+
+
+def Test_Settling(fixture: Fixture) -> None:
+    letters = alphabets.Alphabet()
+    texts.Learn_Alphabet(PYRAMID_CORPUS, letters)
+    size = alphabets.Size(letters)
+    speller = counting_oracles.Counting_Oracle()
+    counting_oracles.Train(speller, texts.Read_Symbols(PYRAMID_CORPUS, letters), size)
+    Check(fixture, "the alphabet of the sample has 51 symbols", size == 51)
+
+    symbols = texts.Encoded("En la boca vixen muchas bactemias.", letters)
+    result, outcome = Settle_Text(speller, letters, symbols, settling.Even_Anchors(symbols, certainties.Certainty_Of(0.99, size)))
+    Check(fixture, "two wrong letters nobody pointed at are found and mended",
+          result == "En la boca viven muchas bacterias." and outcome.passes == 2 and outcome.changes == 2 and outcome.is_settled)
+
+    anchors = settling.Even_Anchors(symbols, certainties.Certainty_Of(certainties.NO_IDEA, size))
+    result, outcome = Settle_Text(speller, letters, symbols, anchors)
+    Check(fixture, "with no idea of any letter the whole text is rewritten",
+          result == "ue se hacerse en muchos dos y la v" and outcome.passes == 7 and outcome.changes == 32 and outcome.is_settled)
+
+    symbols = texts.Encoded("En la boca vixen muchas bacterias.", letters)
+    anchors = settling.Even_Anchors(symbols, 1.0)
+    anchors[13] = anchored_oracles.Signed_Anchor_Of(symbols[13], certainties.SURELY_WRONG, size)
+    result, outcome = Settle_Text(speller, letters, symbols, anchors)
+    Check(fixture, "a letter marked surely wrong is the only one that changes",
+          result == "En la boca viven muchas bacterias." and outcome.changes == 1)
+
+    symbols = texts.Encoded("Los patos duermen mucho.", letters)
+    anchors = settling.Even_Anchors(symbols, certainties.Certainty_Of(0.5, size))
+    anchors[4] = anchored_oracles.Anchor_Of(symbols[4], 1.0)
+    result, outcome = Settle_Text(speller, letters, symbols, anchors)
+    Check(fixture, "a pinned letter stays where it was put while a looser neighbour moves",
+          result == "Los patos duermen muche." and outcome.changes == 1)
+
+
 def Main() -> None:
     fixture = Fixture()
     groups = [
@@ -808,6 +890,9 @@ def Main() -> None:
         ("Kinds of token", Test_Kinds),
         ("Boxed oracle", Test_Boxed_Oracles),
         ("Pyramid and writers", Test_Pyramids),
+        ("The dial", Test_Certainties),
+        ("Anchored oracle", Test_Anchored_Oracles),
+        ("Settling", Test_Settling),
         ]
     for title, group in groups:
         print(title)
