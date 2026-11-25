@@ -245,6 +245,18 @@ one language, so each list grows its own brain.
 Both ways use the same engine and the same brains. A kind of word is a symbol,
 exactly as a letter is. The numbers are in experiment E11.
 
+## Changing a text and letting it settle
+
+    ./bin/calipso_settle data/sample_es.txt "En la boca vixen muchas bactemias."
+    ./bin/calipso_settle data/sample_es.txt "Los gatos duermen mucho." pin=5:p signed=0.5
+    ./bin/calipso_settle data/sample_es.txt "En la boca vixen muchas bacterias." wrong=14 sure=1
+
+Every letter has a **dial**: how sure we are that it is right. It can be said
+on two scales, `sure=` from 0 to 1 (a chance) or `signed=` from -1 (surely
+wrong) through 0 (no idea) to 1 (surely right). `pin=` writes letters that are
+certain; `wrong=` marks a letter that must change. The text is then read again
+and again until nothing changes. See experiment E12.
+
 ## Project map
 
 ```
@@ -262,6 +274,7 @@ The brains      Brains  Neurons  Neuron_Kinds  Bias_Neurons  Basis_Neurons  Coun
                 Counting_Oracles  Fragment_Counts  Records
 The text        Alphabets  Texts  Sources  Memory_Sources  File_Sources
 The levels      Tokens  Kinds  Boxed_Oracles  Pyramids  Writers
+The dial        Certainties  Anchored_Oracles  Settling
 The web         Web_Addresses  Pages  Robots  Fetchers  Curl_Fetchers  Folder_Fetchers
                 Web_Sources  Web_Servers  Panels
 Small tools     Distributions  Numbers  Random_Sources  Console

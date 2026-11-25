@@ -563,6 +563,67 @@ above sentences (paragraph, heading, list) so the shape of a page is planned
 too; and filling a hole of free length with the pyramid, which needs reading
 the surroundings bottom-up before planning top-down.
 
+## 14. The dial: cells that are neither fixed nor empty
+
+A cell used to have two states that matter: **Given** (it cannot change) and
+**Blank** (nothing is known about it). The dial puts every position in between.
+
+**One dial, two scales** (`Calipso.Certainties`):
+
+| | surely wrong | no idea | surely right |
+|---|---|---|---|
+| `Certainty`, a chance | 0 | 1/N | 1 |
+| `Signed_Certainty` | -1 | 0 | +1 |
+
+On the first scale "no idea" depends on N, the number of symbols: 0.011 for 91
+letters, 0.004 for 253 kinds. On the signed scale it is always 0. That is why
+the signed scale is the better one to *declare* a dial with, and the chance is
+the better one to *calculate* with. `Certainty_Of` and `Signed_Of` turn one
+into the other; each half of the signed scale is a straight line.
+
+**The anchored oracle** (`Calipso.Anchored_Oracles`). A cell remembers the
+symbol it had and how sure it was. The memory is turned into weights (the
+certainty for the symbol held, the rest shared among the others), multiplied
+by the brain's opinion, and scaled to add up to 1. So:
+
+- certainty 1 keeps the symbol whatever the brain says: a Given cell;
+- certainty 1/N leaves the opinion as it was: a Blank cell;
+- certainty 0 forbids the symbol: "anything but this", which is new.
+
+Given and Blank are the two ends of the dial, not a separate mechanism. In
+between, the certainty is a **price**: how strongly the neighbours must
+disagree before the cell changes. With 91 symbols a cell held at 0.5 changes
+only when the brain finds another symbol about 90 times more likely.
+
+**Settling** (`Calipso.Settling`). The text is read from left to right. Each
+cell decides again from its neighbours *as they are now* and from its anchor,
+and takes the most likely symbol. The text is read again until a whole reading
+changes nothing. That text is a fixed point of the reading. A pinned change is
+an anchor that is certain of the new symbol; a cell marked "surely wrong" has
+certainty 0. The number of readings is capped (8), so it always ends.
+
+Why not empty the cells and collapse them as usual? Because an empty cell
+tells its neighbours nothing. Here every cell keeps speaking to its neighbours
+while it waits to be read again, so the old text is context, not only a
+preference.
+
+What was measured is in E12. What this does not do yet:
+
+- It works on one level. Settling the *kinds* and writing the letters again
+  below them (loose kinds, stiff letters) needs the two levels joined.
+- The length never changes. A word cannot become a longer word.
+- **A dial of meaning.** "The cat is on the sofa" and "On top of the sofa
+  there is a kitten" should point to the same state. Nothing here knows that:
+  kinds by shape do not even put "cat" and "kitten" together. It needs kinds
+  learned from the company words keep, and then a level whose symbols do not
+  care about word order. That level is the real target of the pyramid.
+- **Cuts that are not decided.** A level that chunks must choose where the
+  cuts go, and a text can be cut in more than one way. Instead of choosing,
+  every window of the text can be given a kind, overlapping its neighbours,
+  the way the counting brain already looks at every run of letters. No cut is
+  ever made; spaces and commas are symbols like the rest, and whether they
+  matter is learned.
+
 ## Reading
 
 - *Flexible-length Text Infilling for Discrete Diffusion Models* (DDOT):

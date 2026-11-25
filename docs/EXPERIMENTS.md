@@ -334,6 +334,53 @@ Examples, same dice:
 4. **Kinds by shape are crude.** Size and ending do not tell a verb from a
    noun. The next step is kinds learned from the company a word keeps.
 
+## E12. The dial: can soft cells find and mend a wrong letter?
+
+*Question.* Until now a cell was Given (it cannot change) or Blank (nothing is
+known). With a certainty in between, can a text settle around a change, and can
+the brain find a wrong letter nobody pointed at?
+
+*How.* `reference/experiments/settling_exam.py` on the English book. 300 pieces
+of 80 letters from the tenth never studied; in each, one small letter is
+replaced by another. The alphabet has 91 symbols, so "no idea" is a certainty
+of 1/91 = 0.011.
+
+**Part A. Nobody says where the wrong letter is.** Every cell gets the same
+certainty and the text is read until it settles.
+
+| Signed dial | The same as a chance | Wrong letter mended | Right letters spoiled, in every 100 |
+|---|---|---|---|
+| 0 (no idea) | 0.011 | 21.0 % | 34.78 |
+| 0.5 | 0.506 | 49.7 % | 6.01 |
+| 0.9 | 0.901 | 63.0 % | 2.83 |
+| 0.99 | 0.990 | 70.0 % | 1.40 |
+| 0.999 | 0.999 | 71.7 % | 0.74 |
+| 0.9999 | 0.9999 | 70.0 % | 0.36 |
+
+**Part B. The wrong cell is marked, every other cell is certain.**
+
+| How the wrong cell is marked | Right letter back |
+|---|---|
+| no idea (0): the same as a hole | 85.0 % |
+| surely wrong (-1) | 85.0 % |
+
+*What it says.*
+
+1. **The dial works, and it does something the engine could not do before.**
+   With every letter held at 0.99 or more, the brain finds and mends about 70 %
+   of wrong letters it was never told about, and spoils about one right letter
+   in a hundred.
+2. **The dial must be set high.** At 0.5 one right letter in seventeen is
+   spoiled. A certainty of one half sounds neutral and is not: neutral is 1/91.
+   This is the case for the signed scale, where neutral is always 0.
+3. **"Surely wrong" added nothing here.** Telling the brain "not this letter"
+   is free information only when the brain might have chosen that letter. A
+   random wrong letter is never its choice, so -1 and a plain hole give the
+   same 85 %. The negative half needs a harder exam: wrong letters that look
+   right ("form" for "from").
+4. **Part of the "spoiled" letters are words the brain never met.** The text
+   is unseen, and a rare word looks like a mistake to a brain that counts.
+
 ## Summary
 
 | Part of the idea | Does it hold? |
@@ -347,4 +394,5 @@ Examples, same dice:
 | Memory of a fixed size | Yes, once each counter knows whose it is. |
 | Brains that are small to store and send | Yes: packed, four to six times smaller, nothing lost. |
 | A level above the letters (the pyramid) | Partly. Deciding the kind of word first rebuilds a hidden word better (19 % to 30 %). Free writing does not improve yet: the letter level cannot obey its boxes well, and kinds by shape are crude. |
+| Cells that are neither fixed nor empty (the dial) | Yes. A text settles around a change, and about 70 % of wrong letters nobody pointed at are mended, at the price of one right letter in a hundred. |
 | Text with meaning | **Not yet.** It is the limit of these brains, not of the engine. |
