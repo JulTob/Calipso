@@ -50,6 +50,7 @@ with Calipso.Settling;
 with Calipso.Templates;
 with Calipso.Texts;
 with Calipso.Tokens;
+with Calipso.Vectors;
 with Calipso.Web_Addresses;
 with Calipso.Web_Sources;
 with Calipso.Writers;
@@ -61,11 +62,13 @@ procedure Calipso_Tests is
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
     use type Certainties.Certainty;
+    use type Certainties.Evidence;
     use type Certainties.Signed_Certainty;
     use type Kinds.Kind_Family;
     use type Pages.Block_Kind;
     use type Texts.Symbol_Text;
     use type Tokens.Token_Sort;
+    use type Vectors.Vector;
     use type Web_Addresses.Content_Kind;
 
     package Wide_Texts renames Ada.Strings.Wide_Wide_Unbounded;
@@ -1097,6 +1100,94 @@ procedure Calipso_Tests is
             );
         end Test_Settling;
 
+    procedure Test_Evidence is
+        Half     : constant Certainties.Signed_Certainty := 0.5;
+        Joined   : constant Certainties.Signed_Certainty := Half & 0.3;
+        Together : constant Certainties.Evidence := Certainties.To_Evidence (0.5) + Certainties.To_Evidence (0.3);
+        begin
+        Check (
+            "evidence 0 is no idea on every scale",
+            Certainties.Signed_From (0.0) = Certainties.No_Idea
+            and then abs (Long_Float (Certainties.Certainty_From (0.0, 100)) - 0.01) < 1.0E-12
+            );
+        Check (
+            "the signed dial is the tanh of half the evidence",
+            abs (Long_Float (Certainties.Signed_From (2.0)) - 0.7615941559557649) < 1.0E-12
+            );
+        Check (
+            "and back: 0.99 on the signed dial stands for 5.29 nats",
+            abs (Long_Float (Certainties.To_Evidence (0.99)) - 5.293304824724491) < 1.0E-9
+            );
+        Check (
+            "a chance of one half among 100 symbols is 4.6 nats above pure chance",
+            abs (Long_Float (Certainties.To_Evidence (0.5, 100)) - 4.59511985013459) < 1.0E-9
+            );
+        Check (
+            "two sources join: their evidence adds, on either scale",
+            abs (Long_Float (Certainties.Signed_From (Together)) - Long_Float (Joined)) < 1.0E-12
+            and then abs (Long_Float (Joined) - 0.6956521739130435) < 1.0E-12
+            );
+        Check (
+            "joining with no idea changes nothing, and opposite certainties cancel",
+            (Half & Certainties.No_Idea) = Half
+            and then (Half & (-0.5)) = Certainties.No_Idea
+            and then (Certainties.Surely_Right & Certainties.Surely_Wrong) = Certainties.No_Idea
+            );
+        Check (
+            "the curved model keeps the three fixed points of the dial",
+            Certainties.Certainty_Of (Certainties.Surely_Right, 100, Certainties.Curved) = 1.0
+            and then Certainties.Certainty_Of (Certainties.Surely_Wrong, 100, Certainties.Curved) = 0.0
+            and then abs (Long_Float (Certainties.Certainty_Of (Certainties.No_Idea, 100, Certainties.Curved)) - 0.01)
+                     < 1.0E-12
+            );
+        Check (
+            "between them the models differ: 0.5 is a chance of 0.505 when straight and 0.029 when curved",
+            abs (Long_Float (Certainties.Certainty_Of (Half, 100, Certainties.Straight)) - 0.505) < 1.0E-12
+            and then abs (Long_Float (Certainties.Certainty_Of (Half, 100, Certainties.Curved)) - 0.029411764705882366)
+                     < 1.0E-9
+            );
+        end Test_Evidence;
+
+    procedure Test_Vectors is
+        Before : constant Vectors.Vector := (1.0, 0.0, 0.0, 0.0);
+        After  : constant Vectors.Vector := (0.0, 0.0, 1.0, 0.0);
+        Mixed  : constant Vectors.Vector := (1.0, 0.0, 0.0, 1.0);
+        Other  : constant Vectors.Vector := (1.0, 0.0, 1.0, 0.0);
+        Low    : constant Vectors.Vector := (1.0, 2.0, 3.0);
+        High   : constant Vectors.Vector := (4.0, 5.0, 6.0);
+        Flat   : constant Vectors.Vector := (3.0, 4.0);
+        Dot    : constant Long_Float := Low * High;
+        Sum    : constant Vectors.Vector := Low + 2.0 * High;
+        begin
+        Check ("the dot product multiplies place by place and adds", Dot = 32.0);
+        Check ("adding and scaling work place by place", Sum = (9.0, 12.0, 15.0) and then High - Low = (3.0, 3.0, 3.0));
+        Check ("the length of (3, 4) is 5", Vectors.Length (Flat) = 5.0);
+        Check (
+            "the unit arrow has length 1",
+            abs (Vectors.Length (Vectors.Unit (Flat)) - 1.0) < 1.0E-12
+            );
+        Check (
+            "arrows at a right angle have cosine 0, opposite arrows -1, the same arrow +1",
+            Vectors.Cosine (Before, After) = 0.0
+            and then abs (Vectors.Cosine (Flat, (-1.0) * Flat) + 1.0) < 1.0E-12
+            and then abs (Vectors.Cosine (Flat, 2.0 * Flat) - 1.0) < 1.0E-12
+            );
+        Check (
+            "the complex product: its real part is the dot product",
+            Vectors.Complex_Product (Mixed, Other).Re = 1.0 and then Vectors.Complex_Product (Mixed, Other).Im = 1.0
+            );
+        Check (
+            "its imaginary part changes sign when the two are swapped: it holds order",
+            Vectors.Complex_Product (Before, After).Im = 1.0 and then Vectors.Complex_Product (After, Before).Im = -1.0
+            );
+        Check (
+            "the turn is +90 degrees one way, -90 the other, and 45 half way",
+            abs (Vectors.Turn (Before, After) - 90.0) < 1.0E-9
+            and then abs (Vectors.Turn (After, Before) + 90.0) < 1.0E-9
+            and then abs (Vectors.Turn (Mixed, Other) - 45.0) < 1.0E-9
+            );
+        end Test_Vectors;
+
     procedure Test_Web_Sources is
         Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
         Options    : Web_Sources.Settings;
@@ -1219,6 +1310,8 @@ procedure Calipso_Tests is
     Run_Group ("The dial", Test_Certainties'Access);
     Run_Group ("Anchored oracle", Test_Anchored_Oracles'Access);
     Run_Group ("Settling", Test_Settling'Access);
+    Run_Group ("Evidence and the curved dial", Test_Evidence'Access);
+    Run_Group ("Vectors", Test_Vectors'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

@@ -1,7 +1,7 @@
 --  A program that changes a text at fixed points and lets the rest settle.
 --
 --  Usage:
---     calipso_settle CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [passes=N]
+--     calipso_settle CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [model=M] [passes=N]
 --
 --  It studies CORPUS, writes TEXT on a canvas, and reads it again and again until
 --  nothing changes. Places count letters from 1.
@@ -11,6 +11,8 @@
 --     sure=X             how sure every other letter is, as a chance from 0 to 1
 --     signed=X           the same dial on the scale from -1 (surely wrong) through
 --                        0 (no idea) to 1 (surely right). 0.99 if neither is said
+--     model=M            how the signed dial is read as a chance: straight (two straight
+--                        lines, if not said) or curved (the tanh of half the evidence)
 --     passes=N           the most readings (8 if not said)
 --
 --  It mirrors reference/settle.py: with the same arguments it writes the same.
@@ -62,6 +64,7 @@ procedure Calipso_Settle is
         --# True when the dial was given as a chance (sure=), False when on the signed scale.
         Sure     : Certainties.Certainty := 1.0;
         Signed   : Certainties.Signed_Certainty := Default_Signed;
+        Model    : Certainties.Dial_Model := Certainties.Straight;
         Passes   : Positive := Settling.Default_Passes;
         end record;
     --# What the command line asked for.
@@ -126,6 +129,19 @@ procedure Calipso_Settle is
             );
         end Pin_Of;
 
+    function Model_Named (
+            Name : in String
+            ) return Certainties.Dial_Model is
+        begin
+        if Name = "straight" then
+            return Certainties.Straight;
+            end if;
+        if Name = "curved" then
+            return Certainties.Curved;
+            end if;
+        raise Bad_Argument with "the model is straight or curved. Found: " & Name;
+        end Model_Named;
+
     procedure Take_Option (
             Wanted : in out Choices;
             Word   : in     String
@@ -149,6 +165,8 @@ procedure Calipso_Settle is
             elsif Name = "signed" then
                 Wanted.Signed := Certainties.Signed_Certainty (Real_Number (Value, -1.0, 1.0));
                 Wanted.Has_Sure := False;
+            elsif Name = "model" then
+                Wanted.Model := Model_Named (Value);
             elsif Name = "passes" then
                 Wanted.Passes := Whole_Number (Value, 1);
             else
@@ -199,7 +217,7 @@ procedure Calipso_Settle is
         if Wanted.Has_Sure then
             return Wanted.Sure;
             end if;
-        return Certainties.Certainty_Of (Wanted.Signed, Size);
+        return Certainties.Certainty_Of (Wanted.Signed, Size, Wanted.Model);
         end Rest_Certainty;
     --# The dial of every letter that is neither pinned nor marked, whichever scale it was given on.
 
@@ -278,7 +296,7 @@ procedure Calipso_Settle is
         begin
         Console.Put_Line ("Usage:");
         Console.Put_Line (
-            "   calipso_settle CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [passes=N]"
+            "   calipso_settle CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [model=M] [passes=N]"
             );
         end Show_Usage;
 

@@ -39,6 +39,7 @@ from calipso_ref import sources
 from calipso_ref import templates
 from calipso_ref import texts
 from calipso_ref import tokens
+from calipso_ref import vectors
 from calipso_ref import web_addresses
 from calipso_ref import web_sources
 from calipso_ref import writers
@@ -864,6 +865,56 @@ def Test_Settling(fixture: Fixture) -> None:
           result == "Los patos duermen muche." and outcome.changes == 1)
 
 
+def Test_Evidence(fixture: Fixture) -> None:
+    joined = certainties.Joined(0.5, 0.3)
+    together = certainties.Evidence_Of_Signed(0.5) + certainties.Evidence_Of_Signed(0.3)
+    Check(fixture, "evidence 0 is no idea on every scale",
+          certainties.Signed_From(0.0) == certainties.NO_IDEA and abs(certainties.Certainty_From(0.0, 100) - 0.01) < 1.0e-12)
+    Check(fixture, "the signed dial is the tanh of half the evidence", abs(certainties.Signed_From(2.0) - 0.7615941559557649) < 1.0e-12)
+    Check(fixture, "and back: 0.99 on the signed dial stands for 5.29 nats",
+          abs(certainties.Evidence_Of_Signed(0.99) - 5.293304824724491) < 1.0e-9)
+    Check(fixture, "a chance of one half among 100 symbols is 4.6 nats above pure chance",
+          abs(certainties.Evidence_Of_Certainty(0.5, 100) - 4.59511985013459) < 1.0e-9)
+    Check(fixture, "two sources join: their evidence adds, on either scale",
+          abs(certainties.Signed_From(together) - joined) < 1.0e-12 and abs(joined - 0.6956521739130435) < 1.0e-12)
+    Check(fixture, "joining with no idea changes nothing, and opposite certainties cancel",
+          certainties.Joined(0.5, certainties.NO_IDEA) == 0.5 and certainties.Joined(0.5, -0.5) == certainties.NO_IDEA
+          and certainties.Joined(certainties.SURELY_RIGHT, certainties.SURELY_WRONG) == certainties.NO_IDEA)
+    Check(fixture, "the curved model keeps the three fixed points of the dial",
+          certainties.Certainty_By(certainties.SURELY_RIGHT, 100, certainties.CURVED) == 1.0
+          and certainties.Certainty_By(certainties.SURELY_WRONG, 100, certainties.CURVED) == 0.0
+          and abs(certainties.Certainty_By(certainties.NO_IDEA, 100, certainties.CURVED) - 0.01) < 1.0e-12)
+    Check(fixture, "between them the models differ: 0.5 is a chance of 0.505 when straight and 0.029 when curved",
+          abs(certainties.Certainty_By(0.5, 100, certainties.STRAIGHT) - 0.505) < 1.0e-12
+          and abs(certainties.Certainty_By(0.5, 100, certainties.CURVED) - 0.029411764705882366) < 1.0e-9)
+
+
+def Test_Vectors(fixture: Fixture) -> None:
+    before = [1.0, 0.0, 0.0, 0.0]
+    after = [0.0, 0.0, 1.0, 0.0]
+    mixed = [1.0, 0.0, 0.0, 1.0]
+    other = [1.0, 0.0, 1.0, 0.0]
+    low = [1.0, 2.0, 3.0]
+    high = [4.0, 5.0, 6.0]
+    flat = [3.0, 4.0]
+    Check(fixture, "the dot product multiplies place by place and adds", vectors.Dot(low, high) == 32.0)
+    Check(fixture, "adding and scaling work place by place",
+          vectors.Added(low, vectors.Scaled(2.0, high)) == [9.0, 12.0, 15.0] and vectors.Subtracted(high, low) == [3.0, 3.0, 3.0])
+    Check(fixture, "the length of (3, 4) is 5", vectors.Length(flat) == 5.0)
+    Check(fixture, "the unit arrow has length 1", abs(vectors.Length(vectors.Unit(flat)) - 1.0) < 1.0e-12)
+    Check(fixture, "arrows at a right angle have cosine 0, opposite arrows -1, the same arrow +1",
+          vectors.Cosine(before, after) == 0.0
+          and abs(vectors.Cosine(flat, vectors.Scaled(-1.0, flat)) + 1.0) < 1.0e-12
+          and abs(vectors.Cosine(flat, vectors.Scaled(2.0, flat)) - 1.0) < 1.0e-12)
+    Check(fixture, "the complex product: its real part is the dot product",
+          vectors.Complex_Product(mixed, other).real == 1.0 and vectors.Complex_Product(mixed, other).imag == 1.0)
+    Check(fixture, "its imaginary part changes sign when the two are swapped: it holds order",
+          vectors.Complex_Product(before, after).imag == 1.0 and vectors.Complex_Product(after, before).imag == -1.0)
+    Check(fixture, "the turn is +90 degrees one way, -90 the other, and 45 half way",
+          abs(vectors.Turn(before, after) - 90.0) < 1.0e-9 and abs(vectors.Turn(after, before) + 90.0) < 1.0e-9
+          and abs(vectors.Turn(mixed, other) - 45.0) < 1.0e-9)
+
+
 def Main() -> None:
     fixture = Fixture()
     groups = [
@@ -893,6 +944,8 @@ def Main() -> None:
         ("The dial", Test_Certainties),
         ("Anchored oracle", Test_Anchored_Oracles),
         ("Settling", Test_Settling),
+        ("Evidence and the curved dial", Test_Evidence),
+        ("Vectors", Test_Vectors),
         ]
     for title, group in groups:
         print(title)

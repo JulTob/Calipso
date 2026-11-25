@@ -143,6 +143,7 @@ jobs:
           settle_both "En la boca vixen muchas bacterias." wrong=14 sure=1
           settle_both "En la boca viven muchas bacterias." signed=0 passes=3
           settle_both "El cepillo arrastra los restos." pin=4:dientes sure=0.2
+          settle_both "En la boca vixen muchas bactemias." signed=0.9998 model=curved
 
       - name: The panel - look, check the rules, train, hide and rebuild
         run: |

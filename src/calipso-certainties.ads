@@ -45,4 +45,68 @@ package Calipso.Certainties is
         with Pre => Size >= 2;
     --# A chance, read on the signed dial.
 
+    ---------------------------------------------------------------------------
+    --  The third scale, and the curved model of the dial.
+    --
+    --     Evidence   any number, in nats.  0 = no idea.  Positive = for.  Negative = against.
+    --                Evidence from two sources that do not depend on each other ADDS.
+    --                This is the scale to calculate with.
+    --
+    --  The other two scales are the evidence, squeezed into a fixed range:
+    --
+    --     signed certainty = tanh (evidence / 2)                          between -1 and 1
+    --     certainty        = sigmoid (evidence + the evidence of pure chance)  between 0 and 1
+    --
+    --  tanh and the sigmoid are the same curve drawn on two different rulers.
+
+    type Evidence is new Long_Float;
+
+    Most_Evidence : constant Evidence := 36.0;
+    --# Beyond this a chance cannot be told from 0 or 1 with the numbers the machine keeps.
+
+    type Dial_Model is (Straight, Curved);
+    --# Two models for reading the signed dial as a chance:
+    --#    Straight: each half of the dial is a straight line.
+    --#    Curved  : the dial is the tanh of half the evidence.
+
+    function Signed_From (
+            Weight : in Evidence
+            ) return Signed_Certainty;
+    --# tanh (Weight / 2).
+
+    function To_Evidence (
+            Signed : in Signed_Certainty
+            ) return Evidence;
+    --# The evidence a position of the signed dial stands for. The two ends give Most_Evidence.
+
+    function To_Evidence (
+            Plain : in Certainty;
+            Size  : in Symbol
+            ) return Evidence
+        with Pre => Size >= 2;
+    --# How far a chance is from pure chance, as evidence.
+
+    function Certainty_From (
+            Weight : in Evidence;
+            Size   : in Symbol
+            ) return Certainty
+        with Pre => Size >= 2;
+    --# The sigmoid: the chance that this much evidence makes of pure chance.
+
+    function Certainty_Of (
+            Signed : in Signed_Certainty;
+            Size   : in Symbol;
+            Model  : in Dial_Model
+            ) return Certainty
+        with Pre => Size >= 2;
+    --# The signed dial read as a chance, by the model asked for. The two ends are exact in both.
+
+    function "&" (
+            Left  : in Signed_Certainty;
+            Right : in Signed_Certainty
+            ) return Signed_Certainty;
+    --# Two signed certainties about the same thing, from two sources, made into one:
+    --# the sum of their evidence, read back on the signed dial.
+    --# No_Idea changes nothing; opposite certainties cancel.
+
     end Calipso.Certainties;

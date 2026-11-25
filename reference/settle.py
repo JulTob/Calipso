@@ -2,7 +2,7 @@
 It mirrors apps/calipso_settle.adb.
 
 Usage:
-   python3 reference/settle.py CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [passes=N]
+   python3 reference/settle.py CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [model=M] [passes=N]
 
 It studies CORPUS, writes TEXT on a canvas, and reads it again and again until
 nothing changes. Places count letters from 1.
@@ -12,6 +12,8 @@ nothing changes. Places count letters from 1.
    sure=X             how sure every other letter is, as a chance from 0 to 1
    signed=X           the same dial on the scale from -1 (surely wrong) through
                       0 (no idea) to 1 (surely right). 0.99 if neither is said
+   model=M            how the signed dial is read as a chance: straight (two straight
+                      lines, if not said) or curved (the tanh of half the evidence)
    passes=N           the most readings (8 if not said)
 """
 
@@ -53,6 +55,7 @@ class Choices:
         self.has_sure = False
         self.sure = 1.0
         self.signed = DEFAULT_SIGNED
+        self.model = certainties.STRAIGHT
         self.passes = settling.DEFAULT_PASSES
 
 
@@ -91,6 +94,16 @@ def Pin_Of(
     return Pin(Whole_Number(value[:colon], 1), value[colon + 1:])
 
 
+def Model_Named(
+        name: str
+        ) -> int:
+    if name == "straight":
+        return certainties.STRAIGHT
+    if name == "curved":
+        return certainties.CURVED
+    raise Bad_Argument("the model is straight or curved. Found: " + name)
+
+
 def Take_Option(
         wanted: Choices,
         word: str
@@ -111,6 +124,8 @@ def Take_Option(
     elif name == "signed":
         wanted.signed = Real_Number(value, -1.0, 1.0)
         wanted.has_sure = False
+    elif name == "model":
+        wanted.model = Model_Named(value)
     elif name == "passes":
         wanted.passes = Whole_Number(value, 1)
     else:
@@ -145,7 +160,7 @@ def Anchors_For(
         size: int
         ) -> list:
     #-- Every letter holds on as the dial says; pinned letters are certain; marked letters are surely wrong.
-    rest = wanted.sure if wanted.has_sure else certainties.Certainty_Of(wanted.signed, size)
+    rest = wanted.sure if wanted.has_sure else certainties.Certainty_By(wanted.signed, size, wanted.model)
     anchors = settling.Even_Anchors(symbols, rest)
     for pin in wanted.pins:
         for index in range(0, len(pin.letters)):
@@ -190,7 +205,7 @@ def Run(
 
 def Show_Usage() -> None:
     print("Usage:")
-    print("   calipso_settle CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [passes=N]")
+    print("   calipso_settle CORPUS TEXT [pin=PLACE:LETTERS] [wrong=PLACE] [sure=X] [signed=X] [model=M] [passes=N]")
 
 
 def Main() -> None:
