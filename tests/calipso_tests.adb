@@ -61,6 +61,7 @@ procedure Calipso_Tests is
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
     use type Certainties.Certainty;
+    use type Certainties.Signed_Certainty;
     use type Kinds.Kind_Family;
     use type Pages.Block_Kind;
     use type Texts.Symbol_Text;
