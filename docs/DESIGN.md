@@ -624,6 +624,88 @@ What was measured is in E12. What this does not do yet:
   ever made; spaces and commas are symbols like the rest, and whether they
   matter is learned.
 
+## 15. Three scales for one dial, and an algebra for words
+
+### Evidence, the sigmoid and tanh
+
+Section 14 gave the dial two scales. There is a third, and it is the one the
+others come from (`Calipso.Certainties`):
+
+| Scale | Range | No idea | What it is |
+|---|---|---|---|
+| `Evidence` | any number, in nats | 0 | how far the odds have moved |
+| `Signed_Certainty` | -1 .. 1 | 0 | tanh (evidence / 2) |
+| `Certainty` | 0 .. 1 | 1/N | sigmoid (evidence + the evidence of pure chance) |
+
+tanh and the sigmoid are the same curve on two rulers: `tanh (x/2) = 2 *
+sigmoid (x) - 1`. So "0..1 with sigmoids" and "-1..1 with tanh" are one model
+seen twice, not two.
+
+What makes evidence the scale to calculate with: **evidence from two sources
+adds**. On the signed dial that sum is the operator `&`:
+
+    a & b = (a + b) / (1 + a * b)
+
+`No_Idea` changes nothing, opposite certainties cancel, and joining then
+converting gives the same as converting then adding. A brain already works
+this way: its neurons add scores, which are evidence, and the last step
+(`From_Scores`) is the sigmoid for many symbols at once.
+
+The dial now has two models (`Dial_Model`): `Straight`, where each half of the
+signed dial is a straight line, and `Curved`, where the dial is the tanh of
+half the evidence. Both agree at -1, 0 and +1. In between they are far apart.
+The position that worked best in E12 reads like this:
+
+| Straight dial | As a chance | As evidence | Curved dial |
+|---|---|---|---|
+| 0.5 | 0.506 | 4.5 nats (6.5 bits) | 0.978 |
+| 0.99 | 0.990 | 9.1 nats (13 bits) | 0.99978 |
+| 0.999 | 0.999 | 11.4 nats (16.5 bits) | 0.99998 |
+
+The curved dial is the right algebra and a poor ruler to set by hand: all the
+useful positions crowd against 1. **Bits are the readable unit**: "hold this
+letter with 13 bits".
+
+### Vectors, the cosine and the complex product
+
+`Calipso.Vectors` is the algebra for describing a word by numbers: `+`, `-`,
+scaling, the dot product (`*`), length, the unit arrow and the cosine.
+
+The cosine runs from -1 to 1 like the signed dial, and it is tempting to read
+it as truth. Measured on words described by their company (E13), it is not:
+
+- Counts cannot be negative, so plain cosines never go below 0. Nothing is
+  ever "opposite".
+- After taking the average word away, the most opposite words are words of
+  another grammatical role (a noun against adjectives), at about -0.25. Never
+  near -1, and never "false".
+- Words of opposite meaning keep the same company. "Thicker" and "rarer" come
+  out as near neighbours.
+
+So the signed scale is the right *container* for truth, and company is not
+what fills its negative half. "A dog is a reptile" needs evidence against,
+and counting neighbours never says "not".
+
+The complex product. With the ordinary angle between two arrows, `cos + i sin`
+adds nothing: the sine is fixed by the cosine. It becomes useful when the two
+halves of a vector mean different things. A word's company has two halves,
+what stands before it and what stands after it. Read as `before + i * after`:
+
+- the real part of the product of two words is the plain dot product: can one
+  replace the other?
+- the imaginary part is one word's "before" against the other's "after", both
+  ways, subtracted. Swap the two words and it changes sign. It holds **order**.
+
+The angle of the product (`Turn`) then says which relation two words have:
+near 0 degrees they replace each other ("thicker", "broader", "larger"); near
++90 or -90 one stands where the other's neighbours stand. This is the general
+rule behind the idea: a real dot product forgets order, a complex one keeps it
+as a phase. Meaning that should not depend on word order is the part with the
+phase thrown away.
+
+Nothing uses `Calipso.Vectors` yet. It is the base for kinds decided by
+company (E13) and for levels without cuts.
+
 ## Reading
 
 - *Flexible-length Text Infilling for Discrete Diffusion Models* (DDOT):

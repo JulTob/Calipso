@@ -381,6 +381,61 @@ certainty and the text is read until it settles.
 4. **Part of the "spoiled" letters are words the brain never met.** The text
    is unseen, and a rare word looks like a mistake to a brain that counts.
 
+## E13. Sigmoid or tanh, cosine as truth, and a complex product
+
+*Question.* Four options were on the table: neurons whose votes are bounded by
+tanh; kinds decided by the company a word keeps; the cosine as a truth level
+from -1 to 1; a complex dot product. Which are worth building?
+
+*How.* Quick prototypes on the English book. The first uses the reference
+brain with two steps replaced; the others use a numeric library and are not
+in the repository. They are measurements to decide what to build, not
+finished code.
+
+**Votes bounded by tanh** (brain `bias+position+decay`, 2000 lessons; each
+neuron's vote passes through `bound * tanh (vote / bound)` before the sum):
+
+| Votes | Right at 15 % hidden | at 50 % | at 85 % | Surprise at 15 % |
+|---|---|---|---|---|
+| plain sum | 43.4 % | 34.1 % | 24.4 % | 2.139 nats |
+| tanh, bound 4 nats | 42.6 % | 34.6 % | 24.0 % | 2.123 nats |
+| tanh, bound 2 nats | 42.3 % | 33.8 % | 23.3 % | 2.181 nats |
+
+**Kinds by company** (hidden-word exam of E11, the "pick" handover; every word
+that is not its own kind is described by 472 counts of the kinds around it,
+reduced to its main axes, then grouped):
+
+| Kinds decided by | Hidden word rebuilt exactly |
+|---|---|
+| shape (what is built) | 32.2 % |
+| company, 8 axes | 33.1 % |
+| company, 24 axes | 34.3 % |
+| company, 60 axes | 36.2 % |
+| company, all 472 numbers | 35.5 % |
+
+**The cosine as truth.** Plain cosines between words run from 0 to 1. After
+removing the average word, the most opposite words to "Telescope" are
+"outmost", "next", "exterior" at -0.23; to "easily" they are "point", "Sine",
+"bottom" at -0.30.
+
+**The complex product.** For "thicker" the nearest words by the real part are
+"convex", "broader", "larger", "rarer", all at an angle within 4 degrees of 0.
+The words with the largest imaginary part sit at 40 to 90 degrees and are of
+another kind ("cannot", "know", "It" one way; "grey", "nine", "Bubbles" the
+other).
+
+*What it says.*
+
+1. **tanh on the neurons buys nothing here.** With a generous bound the brain
+   is the same within noise; with a tight one it is slightly worse. Not built.
+2. **Company beats shape by about four points, and 60 axes do as well as all
+   472 numbers.** Worth building. On 1,082 words the gap is suggestive, not
+   proof.
+3. **The cosine is likeness, not truth.** Its negative side means "another
+   grammatical role", and opposites in meaning look alike.
+4. **The imaginary part separates "replaces" from "stands next to".** The
+   pairs are too rare in this book to confirm it by direct counting.
+
 ## Summary
 
 | Part of the idea | Does it hold? |

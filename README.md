@@ -257,6 +257,10 @@ wrong) through 0 (no idea) to 1 (surely right). `pin=` writes letters that are
 certain; `wrong=` marks a letter that must change. The text is then read again
 and again until nothing changes. See experiment E12.
 
+`model=curved` reads the signed dial as the tanh of half the evidence instead
+of two straight lines. Design section 15 says how the three scales (evidence,
+signed, chance) turn into each other.
+
 ## Project map
 
 ```
@@ -275,6 +279,7 @@ The brains      Brains  Neurons  Neuron_Kinds  Bias_Neurons  Basis_Neurons  Coun
 The text        Alphabets  Texts  Sources  Memory_Sources  File_Sources
 The levels      Tokens  Kinds  Boxed_Oracles  Pyramids  Writers
 The dial        Certainties  Anchored_Oracles  Settling
+The algebra     Vectors
 The web         Web_Addresses  Pages  Robots  Fetchers  Curl_Fetchers  Folder_Fetchers
                 Web_Sources  Web_Servers  Panels
 Small tools     Distributions  Numbers  Random_Sources  Console
