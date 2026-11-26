@@ -18,9 +18,10 @@ with Calipso.Random_Sources;
 with Calipso.Texts;
 with Calipso.Tokens;
 
-private with Ada.Containers.Indefinite_Hashed_Maps;
+with Ada.Containers.Indefinite_Hashed_Maps;
+with Ada.Strings.Wide_Wide_Hash;
+
 private with Ada.Containers.Vectors;
-private with Ada.Strings.Wide_Wide_Hash;
 
 package Calipso.Kinds is
 
@@ -41,6 +42,27 @@ package Calipso.Kinds is
             Sample : in Tokens.Token_List
             ) return Book;
     --# Reads a text once and decides the kinds.
+
+    package Word_Groups is new Ada.Containers.Indefinite_Hashed_Maps (
+            Key_Type        => Wide_Wide_String,
+            Element_Type    => Positive,
+            Hash            => Ada.Strings.Wide_Wide_Hash,
+            Equivalent_Keys => "="
+            );
+    --# The group of each word, counted from 1, as decided somewhere else.
+
+    Plain_Shapes : constant := 2 * Size_Groups;
+    --# A book made by groups still keeps the shapes with no ending, for words it never met.
+
+    function Built_By_Groups (
+            Sample      : in Tokens.Token_List;
+            Chosen      : in Word_Groups.Map;
+            Group_Count : in Natural
+            ) return Book;
+    --# A book whose kinds for unusual words are groups: Chosen says the group of each
+    --# word. To the rest of the system a group is a shape whose members were chosen
+    --# by the company they keep instead of by their looks. Groups that do not fit in
+    --# a Symbol are left out, and their words are known by shape.
 
     function Kind_Count (
             Self : in Book

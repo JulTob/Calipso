@@ -29,6 +29,7 @@ from calipso_ref import distributions
 from calipso_ref import fetchers
 from calipso_ref import fragment_counts
 from calipso_ref import groups
+from calipso_ref import kind_makers
 from calipso_ref import kinds
 from calipso_ref import neuron_kinds
 from calipso_ref import pages
@@ -45,6 +46,7 @@ from calipso_ref import tokens
 from calipso_ref import vectors
 from calipso_ref import web_addresses
 from calipso_ref import web_sources
+from calipso_ref import word_exams
 from calipso_ref import writers
 
 CORPUS_TEXT = (
@@ -972,6 +974,32 @@ def Test_Axes_And_Groups(fixture: Fixture) -> None:
           whole[2] == 2 and whole[3] == 2 and whole[4] == 3 and whole[0] == 1)
 
 
+def Check_Word_Exam(fixture: Fixture, name: str, options: kind_makers.Settings, count: int, right: int) -> None:
+    #-- Studies nine tenths of the sample with the kinds decided as `options` says, and gives the exam on the rest.
+    whole = texts.Whole_Text(PYRAMID_CORPUS)
+    cut = (len(whole) * 9) // 10
+    plan = pyramids.Pyramid()
+    pyramids.Study(plan, whole[:cut], options)
+    outcome = word_exams.Exam(plan, tokens.Split(whole[:cut]), tokens.Split(whole[cut:]), 3)
+    Check(fixture, name, kinds.Kind_Count(plan.book) == count and outcome.asked == 56 and outcome.right == right)
+
+
+def Test_Kind_Makers(fixture: Fixture) -> None:
+    options = kind_makers.Settings()
+    Check_Word_Exam(fixture, "kinds by shape: 216 kinds, 18 of 56 hidden words rebuilt", options, 216, 18)
+    options.way = kind_makers.BY_COMPANY
+    options.axes = 4
+    options.rounds = 5
+    options.groups = 12
+    Check_Word_Exam(fixture, "kinds by company, 4 axes and 12 groups: 148 kinds, 17 of 56", options, 148, 17)
+    options.axes = 3
+    options.rounds = 3
+    options.company.reach = 2
+    options.company.context = company.AS_WORDS
+    options.company.fold_case = False
+    Check_Word_Exam(fixture, "neighbours counted as words, two each way, capitals kept: 148 kinds, 17 of 56", options, 148, 17)
+
+
 def Main() -> None:
     fixture = Fixture()
     groups = [
@@ -1005,6 +1033,7 @@ def Main() -> None:
         ("Vectors", Test_Vectors),
         ("The company a word keeps", Test_Company),
         ("Main axes and groups", Test_Axes_And_Groups),
+        ("Ways of deciding kinds", Test_Kind_Makers),
         ]
     for title, group in groups:
         print(title)

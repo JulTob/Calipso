@@ -230,10 +230,10 @@ def Note_Members(
         book: Book,
         words: Tally_List
         ) -> None:
-    #-- Which words were seen in each shape, and how often.
+    #-- Which words were seen in each shape or group, and how often.
     for tally in words.items:
-        if tally.text not in book.by_text:
-            kind = Kind_Of(book, tally.text)
+        kind = Kind_Of(book, tally.text)
+        if Family_Of(book, kind) == SHAPE_KIND:
             book.members.setdefault(kind, []).append(Member(tally.text, tally.seen))
             book.totals[kind] = book.totals.get(kind, 0) + tally.seen
 
@@ -248,6 +248,55 @@ def Built(
     Note_Numbers(book)
     Note_Words(book, Ranked(words))
     Note_Endings(book, words)
+    Note_Shapes(book)
+    Note_Members(book, words)
+    return book
+
+
+PLAIN_SHAPES = 2 * SIZE_GROUPS
+#-- A book made by groups still keeps the shapes with no ending, for words it never met.
+
+
+def Room_For_Groups(
+        book: Book
+        ) -> int:
+    return MAX_SYMBOLS - Kind_Count(book) - PLAIN_SHAPES
+
+
+def Note_Groups(
+        book: Book,
+        words: Tally_List,
+        group_of: dict,
+        group_count: int
+        ) -> None:
+    #-- One kind for each group, and every word of a group filed under its kind.
+    #-- To the rest of the system a group is a shape whose members were chosen by
+    #-- the company they keep instead of by their looks.
+    kept = min(group_count, Room_For_Groups(book))
+    first_group = Kind_Count(book) + 1
+    for _ in range(0, kept):
+        note = Kind_Note()
+        note.family = SHAPE_KIND
+        New_Kind(book, note)
+    for tally in words.items:
+        word = tally.text
+        if word not in book.by_text and word in group_of and group_of[word] <= kept:
+            book.by_text[word] = first_group + group_of[word] - 1
+
+
+def Built_By_Groups(
+        sample: list,
+        group_of: dict,
+        group_count: int
+        ) -> Book:
+    #-- A book whose kinds for unusual words are groups decided elsewhere.
+    #-- group_of[word] is the group of a word, counted from 1.
+    book = Book()
+    words = Word_Tallies(sample)
+    Note_Marks(book, sample)
+    Note_Numbers(book)
+    Note_Words(book, Ranked(words))
+    Note_Groups(book, words, group_of, group_count)
     Note_Shapes(book)
     Note_Members(book, words)
     return book

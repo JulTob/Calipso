@@ -235,18 +235,66 @@ package body Calipso.Kinds is
         Kind : Symbol;
         begin
         for Counted of Words.Items loop
+            Kind := Kind_Of (Self, To_Wide_Wide_String (Counted.Text));
+            if Self.Notes (Kind).Family = Shape_Kind then
+                Self.Members (Kind).Append (Kind_Member'(Word => Counted.Text, Seen => Counted.Seen));
+                Self.Totals (Kind) := Self.Totals (Kind) + Counted.Seen;
+                end if;
+            end loop;
+        end Note_Members;
+    --# Which words were seen in each shape or group, and how often.
+
+    function Room_For_Groups (
+            Self : in Book
+            ) return Natural is
+        begin
+        return Natural (Symbol'Last) - Natural (Self.Used) - Plain_Shapes;
+        end Room_For_Groups;
+
+    procedure Note_Groups (
+            Self        : in out Book;
+            Words       : in     Tally_List;
+            Chosen      : in     Word_Groups.Map;
+            Group_Count : in     Natural
+            ) is
+        Kept        : constant Natural := Natural'Min (Group_Count, Room_For_Groups (Self));
+        First_Group : constant Symbol_Count := Self.Used + 1;
+        Note        : Kind_Note;
+        begin
+        Note.Family := Shape_Kind;
+        for Number in 1 .. Kept loop
+            New_Kind (Self, Note);
+            end loop;
+        for Counted of Words.Items loop
             declare
                 Word : constant Wide_Wide_String := To_Wide_Wide_String (Counted.Text);
                 begin
-                if not Self.By_Text.Contains (Word) then
-                    Kind := Kind_Of (Self, Word);
-                    Self.Members (Kind).Append (Kind_Member'(Word => Counted.Text, Seen => Counted.Seen));
-                    Self.Totals (Kind) := Self.Totals (Kind) + Counted.Seen;
+                if not Self.By_Text.Contains (Word) and then Chosen.Contains (Word)
+                   and then Chosen.Element (Word) <= Kept
+                then
+                    Self.By_Text.Insert (Word, First_Group + Symbol_Count (Chosen.Element (Word)) - 1);
                     end if;
                 end;
             end loop;
-        end Note_Members;
-    --# Which words were seen in each shape, and how often.
+        end Note_Groups;
+    --# One kind for each group, and every word of a group filed under its kind.
+
+    function Built_By_Groups (
+            Sample      : in Tokens.Token_List;
+            Chosen      : in Word_Groups.Map;
+            Group_Count : in Natural
+            ) return Book is
+        Self  : Book;
+        Words : constant Tally_List := Word_Tallies (Sample);
+        begin
+        Note_Marks (Self, Sample);
+        Note_Numbers (Self);
+        Note_Words (Self, Ranked (Words));
+        Note_Groups (Self, Words, Chosen, Group_Count);
+        Note_Shapes (Self);
+        Note_Members (Self, Words);
+        return Self;
+        end Built_By_Groups;
 
     function Built (
             Sample : in Tokens.Token_List

@@ -16,6 +16,7 @@ from . import boxed_oracles
 from . import canvases
 from . import collapsing
 from . import counting_oracles
+from . import kind_makers
 from . import kinds
 from . import oracles
 from . import random_sources
@@ -64,11 +65,15 @@ def Kind_Text(
 
 def Study(
         pyramid: Pyramid,
-        text: str
+        text: str,
+        options: kind_makers.Settings = None
         ) -> None:
     #-- Reads the text as tokens, decides the kinds, and counts how kinds follow each other.
+    #-- `options` says how the kinds are decided: by shape if nothing is said.
     sample = tokens.Split(text)
-    pyramid.book = kinds.Built(sample)
+    if options is None:
+        options = kind_makers.Settings()
+    pyramid.book = kind_makers.Book_Of(sample, options)
     kind_text = Kind_Text(pyramid.book, sample)
     counting_oracles.Train(pyramid.brain, kind_text, kinds.Kind_Count(pyramid.book), DEFAULT_LONGEST)
 

@@ -37,6 +37,7 @@ with Calipso.File_Sources;
 with Calipso.Folder_Fetchers;
 with Calipso.Fragment_Counts;
 with Calipso.Groups;
+with Calipso.Kind_Makers;
 with Calipso.Kinds;
 with Calipso.Memory_Sources;
 with Calipso.Neuron_Kinds;
@@ -56,6 +57,7 @@ with Calipso.Tokens;
 with Calipso.Vectors;
 with Calipso.Web_Addresses;
 with Calipso.Web_Sources;
+with Calipso.Word_Exams;
 with Calipso.Writers;
 
 procedure Calipso_Tests is
@@ -1289,6 +1291,46 @@ procedure Calipso_Tests is
             end;
         end Test_Axes_And_Groups;
 
+    procedure Check_Word_Exam (
+            Name    : in String;
+            Options : in Kind_Makers.Settings;
+            Count   : in Natural;
+            Right   : in Natural
+            ) is
+        Whole   : constant Wide_Wide_String := Wide_Texts.To_Wide_Wide_String (Texts.Whole_Text (Pyramid_Corpus));
+        Cut     : constant Natural := (Whole'Length * 9) / 10;
+        Studied : constant Wide_Wide_String := Whole (Whole'First .. Whole'First + Cut - 1);
+        Unseen  : constant Wide_Wide_String := Whole (Whole'First + Cut .. Whole'Last);
+        Plan    : Pyramids.Pyramid;
+        Outcome : Word_Exams.Result;
+        begin
+        Pyramids.Study (Plan, Studied, Options);
+        Outcome := Word_Exams.Exam (Plan, Tokens.Split (Studied), Tokens.Split (Unseen), 3);
+        Check (
+            Name,
+            Natural (Kinds.Kind_Count (Pyramids.Book_Of (Plan))) = Count
+            and then Outcome.Asked = 56 and then Outcome.Right = Right
+            );
+        end Check_Word_Exam;
+    --# Studies nine tenths of the sample with the kinds decided as Options says, and gives the exam on the rest.
+
+    procedure Test_Kind_Makers is
+        Options : Kind_Makers.Settings;
+        begin
+        Check_Word_Exam ("kinds by shape: 216 kinds, 18 of 56 hidden words rebuilt", Options, 216, 18);
+        Options.Way := Kind_Makers.By_Company;
+        Options.Axis_Count := 4;
+        Options.Rounds := 5;
+        Options.Group_Count := 12;
+        Check_Word_Exam ("kinds by company, 4 axes and 12 groups: 148 kinds, 17 of 56", Options, 148, 17);
+        Options.Axis_Count := 3;
+        Options.Rounds := 3;
+        Options.Neighbours.Reach := 2;
+        Options.Neighbours.Context := Company.As_Words;
+        Options.Neighbours.Fold_Case := False;
+        Check_Word_Exam ("neighbours counted as words, two each way, capitals kept: 148 kinds, 17 of 56", Options, 148, 17);
+        end Test_Kind_Makers;
+
     procedure Test_Web_Sources is
         Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
         Options    : Web_Sources.Settings;
@@ -1415,6 +1457,7 @@ procedure Calipso_Tests is
     Run_Group ("Vectors", Test_Vectors'Access);
     Run_Group ("The company a word keeps", Test_Company'Access);
     Run_Group ("Main axes and groups", Test_Axes_And_Groups'Access);
+    Run_Group ("Ways of deciding kinds", Test_Kind_Makers'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

@@ -145,6 +145,20 @@ jobs:
           settle_both "El cepillo arrastra los restos." pin=4:dientes sure=0.2
           settle_both "En la boca vixen muchas bactemias." signed=0.9998 model=curved
 
+      - name: Kinds by shape and by company - the same in Ada and in Python
+        run: |
+          kinds_both () {
+            ./bin/calipso_kinds "$@" > kinds_ada.txt
+            python3 reference/kinds.py "$@" > kinds_python.txt
+            cat kinds_ada.txt
+            diff kinds_ada.txt kinds_python.txt
+          }
+          kinds_both alike tests/data/savanna.txt zebras antelopes lions grass gazelles unicorns
+          kinds_both alike tests/data/savanna.txt zebras antelopes lions reach=2 context=words
+          kinds_both exam data/sample_es.txt step=3
+          kinds_both exam data/sample_es.txt kinds=company axes=4 rounds=5 groups=12 step=3
+          kinds_both exam data/sample_es.txt kinds=company axes=3 rounds=3 groups=12 step=3 reach=2 context=words case=keep
+
       - name: The panel - look, check the rules, train, hide and rebuild
         run: |
           SITE="http%3A%2F%2F127.0.0.1%3A8765"

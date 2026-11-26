@@ -15,6 +15,8 @@
 with Calipso.Alphabets;
 with Calipso.Canvases;
 with Calipso.Counting_Oracles;
+with Calipso.Distributions;
+with Calipso.Kind_Makers;
 with Calipso.Kinds;
 with Calipso.Oracles;
 with Calipso.Random_Sources;
@@ -38,9 +40,24 @@ package Calipso.Pyramids is
             );
     --# Reads the text as tokens, decides the kinds, and counts how kinds follow each other.
 
+    procedure Study (
+            Self    : in out Pyramid;
+            Text    : in     Wide_Wide_String;
+            Options : in     Kind_Makers.Settings
+            );
+    --# The same, with the way of deciding the kinds said: by shape or by company.
+
     function Book_Of (
             Self : in Pyramid
             ) return Kinds.Book;
+
+    function Kind_Opinion (
+            Self     : in Pyramid;
+            Board    : in Canvases.Canvas;
+            Position : in Positive
+            ) return Distributions.Distribution
+        with Pre => Position <= Canvases.Length (Board);
+    --# What the level of kinds thinks goes in one cell of a canvas of kinds.
 
     procedure Write (
             Self    : in     Pyramid;

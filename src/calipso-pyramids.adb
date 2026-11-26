@@ -37,11 +37,30 @@ package body Calipso.Pyramids is
             Self : in out Pyramid;
             Text : in     Wide_Wide_String
             ) is
+        Plain : constant Kind_Makers.Settings := (others => <>);
+        begin
+        Study (Self, Text, Plain);
+        end Study;
+
+    procedure Study (
+            Self    : in out Pyramid;
+            Text    : in     Wide_Wide_String;
+            Options : in     Kind_Makers.Settings
+            ) is
         Sample : constant Tokens.Token_List := Tokens.Split (Text);
         begin
-        Self.Book := Kinds.Built (Sample);
+        Self.Book := Kind_Makers.Book_Of (Sample, Options);
         Counting_Oracles.Train (Self.Brain, Kind_Text (Self.Book, Sample), Kinds.Kind_Count (Self.Book), Default_Longest);
         end Study;
+
+    function Kind_Opinion (
+            Self     : in Pyramid;
+            Board    : in Canvases.Canvas;
+            Position : in Positive
+            ) return Distributions.Distribution is
+        begin
+        return Self.Brain.Opinion (Board, Position);
+        end Kind_Opinion;
 
     function Book_Of (
             Self : in Pyramid
