@@ -15,7 +15,7 @@
 --     reach=N               tokens looked at on each side of a word (1)
 --     context=kinds|words   what a neighbour counts as (kinds)
 --     case=fold|keep        whether "Zebras" and "zebras" are one word (fold)
---     axes=N                numbers kept for each word; 0 keeps them all (24)
+--     axes=N                numbers kept for each word; 0 keeps them all (60)
 --     rounds=N              how long each axis is searched for (30)
 --     groups=N              how many groups of words are made (80)
 --     step=N                one word in every N is hidden (9)

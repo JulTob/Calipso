@@ -24,7 +24,7 @@ package Calipso.Kind_Makers is
 
     type Maker is (By_Shape, By_Company);
 
-    Default_Axes   : constant Natural := 24;
+    Default_Axes   : constant Natural := 60;
     Default_Groups : constant Positive := 80;
 
     type Settings is record

@@ -261,6 +261,18 @@ and again until nothing changes. See experiment E12.
 of two straight lines. Design section 15 says how the three scales (evidence,
 signed, chance) turn into each other.
 
+## Kinds by shape or by company
+
+    ./bin/calipso_kinds alike tests/data/savanna.txt zebras antelopes lions grass
+    ./bin/calipso_kinds exam BOOK.txt
+    ./bin/calipso_kinds exam BOOK.txt kinds=company
+    ./bin/calipso_kinds exam BOOK.txt kinds=company axes=24 reach=2 context=words
+
+`alike` describes every word by the company it keeps and says how alike two
+words are. `exam` hides words in the last tenth of a text and counts how often
+the level of kinds gets them back, with the kinds decided the way you say.
+Every step is a module with its own settings: design section 16, experiment E14.
+
 ## Project map
 
 ```
@@ -279,7 +291,7 @@ The brains      Brains  Neurons  Neuron_Kinds  Bias_Neurons  Basis_Neurons  Coun
 The text        Alphabets  Texts  Sources  Memory_Sources  File_Sources
 The levels      Tokens  Kinds  Boxed_Oracles  Pyramids  Writers
 The dial        Certainties  Anchored_Oracles  Settling
-The algebra     Vectors
+The algebra     Vectors  Company  Axes  Groups  Kind_Makers  Word_Exams
 The web         Web_Addresses  Pages  Robots  Fetchers  Curl_Fetchers  Folder_Fetchers
                 Web_Sources  Web_Servers  Panels
 Small tools     Distributions  Numbers  Random_Sources  Console

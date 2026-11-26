@@ -19,7 +19,7 @@ from . import vectors
 
 BY_SHAPE = 0
 BY_COMPANY = 1
-DEFAULT_AXES = 24
+DEFAULT_AXES = 60
 DEFAULT_GROUPS = 80
 
 

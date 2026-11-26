@@ -703,8 +703,57 @@ rule behind the idea: a real dot product forgets order, a complex one keeps it
 as a phase. Meaning that should not depend on word order is the part with the
 phase thrown away.
 
-Nothing uses `Calipso.Vectors` yet. It is the base for kinds decided by
-company (E13) and for levels without cuts.
+`Calipso.Vectors` is the base of the next section.
+
+## 16. Kinds decided by company: a chain of modules
+
+Section 13 decided the kind of an unusual word by its looks. This section
+decides it by the company the word keeps. It is built as a chain, one package
+for each step, so that any step can be changed or replaced:
+
+| Step | Package | What it does | What can be set |
+|---|---|---|---|
+| 1 | `Calipso.Company` | each word becomes a vector: the counts of what stands around it | the reach; what a neighbour counts as; capitals; softening |
+| 2 | `Calipso.Axes` | the vectors are told by a few numbers along their main axes | how many axes (0 skips the step); how long to search |
+| 3 | `Calipso.Groups` | near vectors are put into groups | how many groups; how many passes |
+| 4 | `Calipso.Kinds` | each group becomes a kind of the book | |
+
+`Calipso.Kind_Makers` runs the chain and is where the choice is made:
+`By_Shape` or `By_Company`. Both give a `Book`, so the pyramid, the writers and
+the dial do not know which one they have. `Pyramids.Study` takes the settings.
+
+**What "company" means** is the first setting. A neighbour can count as its
+*kind* (usual words as themselves, the rest by shape): coarse, and what comes
+out is grammar. Or it can count as the *word* it is, hashed into a fixed
+number of buckets so that memory stays bounded: finer, and what comes out is
+closer to meaning ("things that eat grass"). The same code does both.
+
+**The main axes** are found by repeated stretching: take any arrow, let every
+vector pull it toward itself as hard as the two agree, make it of length 1,
+and repeat. It turns toward the direction in which the cloud of vectors is
+widest. Only sums and products are needed, no library. Later axes are found
+the same way with the earlier ones removed.
+
+**Groups.** A group behaves as a shape: it has members, and a word can be
+drawn from it. So `Pick` works unchanged. `Spell` works too, with one loss: a
+group does not know whether its words start with a capital.
+
+A book has room for 255 kinds. Marks, numbers and the 120 usual words take
+their places first, eight plain shapes are kept for words never met, and the
+groups take what is left (80 with a full set of marks).
+
+**The exam** (`Calipso.Word_Exams`, program `calipso_kinds exam`) hides words
+in text never studied and counts how often the level of kinds gets them back.
+It is the judge for every choice in this chain. `calipso_kinds alike` shows
+the cosine and the turn between any two words.
+
+What was measured is in E14. What the chain does not do yet:
+
+- The levels are still two. A level that works on windows of kinds, with no
+  cuts, is the next module.
+- The judge is one exam. Compression (does this book describe the text in
+  fewer bits?) is the more general judge and is not built.
+- Rows are kept whole in memory: fine for a book, too much for a library.
 
 ## Reading
 

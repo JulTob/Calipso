@@ -436,6 +436,53 @@ other).
 4. **The imaginary part separates "replaces" from "stands next to".** The
    pairs are too rare in this book to confirm it by direct counting.
 
+## E14. Kinds by company, with the modules
+
+*Question.* E13 tried kinds by company with borrowed tools. Do the modules
+built for it (Company, Axes, Groups, Kind_Makers) give the same gain, and
+which settings matter?
+
+*How.* The exam of `Calipso.Word_Exams` on the English book: the first nine
+tenths studied, one word in nine of the rest hidden (1,082 words), the answer
+is the most usual studied word of that length in the most likely kind. The
+figures come from the reference modules with their vector sums done by a
+numeric library, because the plain reference would take hours on a whole book
+and the Ada cannot be run where this was written. On small texts the build
+checks that the Ada program writes exactly what the reference writes.
+
+| Kinds decided by | Hidden word rebuilt exactly |
+|---|---|
+| shape | 32.2 % |
+| company, 8 axes | 32.9 % |
+| company, 24 axes | 33.6 % |
+| company, 60 axes | **35.9 %** |
+| company, every count (no axes) | 35.1 % |
+| company, 60 axes, capitals kept apart | 34.9 % |
+| company, 60 axes, two tokens each way | 33.5 % |
+| company, 60 axes, neighbours as words | 33.1 % |
+| company, 60 axes, neighbours as words, two tokens each way | 33.3 % |
+
+Every row by company has 80 groups and 235 kinds in all, the same number of
+kinds as the book by shape.
+
+*What it says.*
+
+1. **The modules reproduce the gain**: 35.9 % against 32.2 %, close to the
+   36.2 % of E13.
+2. **60 numbers do as well as all 472.** The step that shortens the vectors
+   costs nothing in quality. With too few axes (8) the gain is lost. The
+   default is now 60.
+3. **Folding capitals is worth one point.** "The" and "the" keep the same
+   company and should be counted together.
+4. **Looking further, or counting neighbours as words, does not help this
+   exam.** The exam asks for the kind of a word from four neighbours on each
+   side, which is a question of grammar, and the nearest neighbour counted as
+   a kind answers it best. The finer settings are for groups by meaning, which
+   this exam does not reward and this book is too small to show.
+5. **The lions.** On five sentences (`tests/data/savanna.txt`) zebras and
+   antelopes come out with cosine 1.000, lions and grass with 0, and their
+   turn of 90 degrees says they stand on opposite sides of the same word.
+
 ## Summary
 
 | Part of the idea | Does it hold? |
@@ -450,4 +497,5 @@ other).
 | Brains that are small to store and send | Yes: packed, four to six times smaller, nothing lost. |
 | A level above the letters (the pyramid) | Partly. Deciding the kind of word first rebuilds a hidden word better (19 % to 30 %). Free writing does not improve yet: the letter level cannot obey its boxes well, and kinds by shape are crude. |
 | Cells that are neither fixed nor empty (the dial) | Yes. A text settles around a change, and about 70 % of wrong letters nobody pointed at are mended, at the price of one right letter in a hundred. |
+| Kinds from the company a word keeps | Yes, a little: 35.9 % of hidden words against 32.2 % by shape, and 60 numbers a word are enough. |
 | Text with meaning | **Not yet.** It is the limit of these brains, not of the engine. |
