@@ -18,6 +18,7 @@ with Ada.Strings.Wide_Wide_Unbounded;
 
 with Calipso.Alphabets;
 with Calipso.Anchored_Oracles;
+with Calipso.Axes;
 with Calipso.Basis_Neurons;
 with Calipso.Bias_Neurons;
 with Calipso.Blind_Spots;
@@ -26,6 +27,7 @@ with Calipso.Brains;
 with Calipso.Canvases;
 with Calipso.Certainties;
 with Calipso.Collapsing;
+with Calipso.Company;
 with Calipso.Console;
 with Calipso.Counting_Neurons;
 with Calipso.Counting_Oracles;
@@ -34,6 +36,7 @@ with Calipso.Distributions;
 with Calipso.File_Sources;
 with Calipso.Folder_Fetchers;
 with Calipso.Fragment_Counts;
+with Calipso.Groups;
 with Calipso.Kinds;
 with Calipso.Memory_Sources;
 with Calipso.Neuron_Kinds;
@@ -63,6 +66,7 @@ procedure Calipso_Tests is
     use type Distributions.Distribution;
     use type Certainties.Certainty;
     use type Certainties.Evidence;
+    use type Company.Hash_Number;
     use type Certainties.Signed_Certainty;
     use type Kinds.Kind_Family;
     use type Pages.Block_Kind;
@@ -1188,6 +1192,103 @@ procedure Calipso_Tests is
             );
         end Test_Vectors;
 
+    Savanna : constant Wide_Wide_String :=
+        "Lions eat zebras. Lions eat antelopes. Zebras eat grass. Antelopes eat grass. Gazelles eat grass.";
+    --# Five small sentences in which two animals keep exactly the same company.
+
+    procedure Test_Company is
+        Sample  : constant Tokens.Token_List := Tokens.Split (Savanna);
+        Book    : constant Kinds.Book := Kinds.Built (Sample);
+        Options : Company.Settings;
+        begin
+        Options.Every_Word := True;
+        declare
+            Table : constant Company.Table := Company.Built (Sample, Book, Options);
+            begin
+            Check (
+                "six words, each described by 44 counts",
+                Company.Row_Count (Table) = 6 and then Company.Vector_At (Table, 1)'Length = 44
+                and then Company.Word_At (Table, 1) = "lions" and then Company.Seen_At (Table, 2) = 5
+                );
+            Check (
+                "zebras and antelopes keep the same company: cosine 1",
+                abs (Vectors.Cosine (Company.Vector_Of (Table, "zebras"), Company.Vector_Of (Table, "antelopes")) - 1.0)
+                < 1.0E-12
+                );
+            Check (
+                "lions and grass keep none in common: cosine 0, and a turn of 90 degrees says they stand on opposite sides",
+                Vectors.Cosine (Company.Vector_Of (Table, "lions"), Company.Vector_Of (Table, "grass")) = 0.0
+                and then abs (Vectors.Turn (Company.Vector_Of (Table, "lions"), Company.Vector_Of (Table, "grass")) + 90.0)
+                         < 1.0E-9
+                );
+            Check (
+                "a capital does not make another word, and a word seen once looks like the one it was seen like",
+                abs (Vectors.Cosine (Company.Vector_Of (Table, "Gazelles"), Company.Vector_Of (Table, "Lions"))
+                     - 0.9753386489714635) < 1.0E-9
+                );
+            end;
+        Options.Reach := 2;
+        Options.Context := Company.As_Words;
+        declare
+            Table : constant Company.Table := Company.Built (Sample, Book, Options);
+            begin
+            Check (
+                "looking two words each way, with neighbours counted as words: 1024 counts for each word",
+                Company.Vector_At (Table, 1)'Length = 1_024
+                and then abs (Vectors.Cosine (Company.Vector_Of (Table, "zebras"), Company.Vector_Of (Table, "antelopes"))
+                              - 0.75) < 1.0E-9
+                );
+            end;
+        Check ("the scrambled number of a word", Company.Hash_Of ("zebras") = 2_311_424_180);
+        end Test_Company;
+
+    procedure Test_Axes_And_Groups is
+        Sample  : constant Tokens.Token_List := Tokens.Split (Savanna);
+        Book    : constant Kinds.Book := Kinds.Built (Sample);
+        Options : Company.Settings;
+        Points  : Vectors.Vector_List;
+        begin
+        Options.Every_Word := True;
+        declare
+            Table : constant Company.Table := Company.Built (Sample, Book, Options);
+            Basis : constant Axes.Basis := Axes.Found (Company.Rows_Of (Table), 2);
+            First : constant Vectors.Vector := Axes.Axis_At (Basis, 1);
+            Next  : constant Vectors.Vector := Axes.Axis_At (Basis, 2);
+            Sides : constant Long_Float := First * Next;
+            begin
+            for Row in 1 .. Company.Row_Count (Table) loop
+                Points.Append (Axes.Projected (Basis, Company.Vector_At (Table, Row)));
+                end loop;
+            Check (
+                "two axes of length 1, at right angles",
+                Axes.Axis_Count (Basis) = 2 and then abs (Vectors.Length (First) - 1.0) < 1.0E-9
+                and then abs (Vectors.Length (Next) - 1.0) < 1.0E-9 and then abs Sides < 1.0E-9
+                );
+            Check (
+                "44 counts become 2 numbers, and words of the same company land on the same spot",
+                Points.Element (1)'Length = 2
+                and then abs (Points.Element (1) (1) + 0.39642464446861586) < 1.0E-6
+                and then abs (Points.Element (3) (1) - Points.Element (4) (1)) < 1.0E-9
+                and then abs (Points.Element (3) (2) - Points.Element (4) (2)) < 1.0E-9
+                );
+            declare
+                Numbers : constant Groups.Group_Numbers := Groups.Grouped (Points, 3);
+                Whole   : constant Groups.Group_Numbers := Groups.Grouped (Company.Rows_Of (Table), 3);
+                begin
+                Check (
+                    "three groups from the two numbers: zebras and antelopes together, lions with gazelles",
+                    Numbers.Element (1) = 1 and then Numbers.Element (2) = 3 and then Numbers.Element (3) = 2
+                    and then Numbers.Element (4) = 2 and then Numbers.Element (5) = 3 and then Numbers.Element (6) = 1
+                    );
+                Check (
+                    "three groups from all 44 counts: zebras and antelopes are still together",
+                    Whole.Element (3) = 2 and then Whole.Element (4) = 2 and then Whole.Element (5) = 3
+                    and then Whole.Element (1) = 1
+                    );
+                end;
+            end;
+        end Test_Axes_And_Groups;
+
     procedure Test_Web_Sources is
         Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
         Options    : Web_Sources.Settings;
@@ -1312,6 +1413,8 @@ procedure Calipso_Tests is
     Run_Group ("Settling", Test_Settling'Access);
     Run_Group ("Evidence and the curved dial", Test_Evidence'Access);
     Run_Group ("Vectors", Test_Vectors'Access);
+    Run_Group ("The company a word keeps", Test_Company'Access);
+    Run_Group ("Main axes and groups", Test_Axes_And_Groups'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

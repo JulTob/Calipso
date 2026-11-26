@@ -12,6 +12,7 @@ import sys
 from calipso_ref import UNKNOWN
 from calipso_ref import alphabets
 from calipso_ref import anchored_oracles
+from calipso_ref import axes
 from calipso_ref import basis_neurons
 from calipso_ref import bias_neurons
 from calipso_ref import blind_spots
@@ -20,12 +21,14 @@ from calipso_ref import brains
 from calipso_ref import canvases
 from calipso_ref import certainties
 from calipso_ref import collapsing
+from calipso_ref import company
 from calipso_ref import counting_neurons
 from calipso_ref import counting_oracles
 from calipso_ref import criteria
 from calipso_ref import distributions
 from calipso_ref import fetchers
 from calipso_ref import fragment_counts
+from calipso_ref import groups
 from calipso_ref import kinds
 from calipso_ref import neuron_kinds
 from calipso_ref import pages
@@ -915,6 +918,60 @@ def Test_Vectors(fixture: Fixture) -> None:
           and abs(vectors.Turn(mixed, other) - 45.0) < 1.0e-9)
 
 
+SAVANNA = "Lions eat zebras. Lions eat antelopes. Zebras eat grass. Antelopes eat grass. Gazelles eat grass."
+#-- Five small sentences in which two animals keep exactly the same company.
+
+
+def Test_Company(fixture: Fixture) -> None:
+    sample = tokens.Split(SAVANNA)
+    book = kinds.Built(sample)
+    options = company.Settings()
+    options.every_word = True
+    table = company.Built(sample, book, options)
+
+    def cosine(left, right):
+        return vectors.Cosine(company.Vector_Of(table, left), company.Vector_Of(table, right))
+
+    Check(fixture, "six words, each described by 44 counts",
+          company.Row_Count(table) == 6 and len(company.Vector_At(table, 1)) == 44
+          and company.Word_At(table, 1) == "lions" and company.Seen_At(table, 2) == 5)
+    Check(fixture, "zebras and antelopes keep the same company: cosine 1", abs(cosine("zebras", "antelopes") - 1.0) < 1.0e-12)
+    Check(fixture, "lions and grass keep none in common: cosine 0, and a turn of 90 degrees says they stand on opposite sides",
+          cosine("lions", "grass") == 0.0
+          and abs(vectors.Turn(company.Vector_Of(table, "lions"), company.Vector_Of(table, "grass")) + 90.0) < 1.0e-9)
+    Check(fixture, "a capital does not make another word, and a word seen once looks like the one it was seen like",
+          abs(cosine("Gazelles", "Lions") - 0.9753386489714635) < 1.0e-9)
+    options = company.Settings()
+    options.every_word = True
+    options.reach = 2
+    options.context = company.AS_WORDS
+    table = company.Built(sample, book, options)
+    Check(fixture, "looking two words each way, with neighbours counted as words: 1024 counts for each word",
+          len(company.Vector_At(table, 1)) == 1024 and abs(cosine("zebras", "antelopes") - 0.75) < 1.0e-9)
+    Check(fixture, "the scrambled number of a word", company.Hash_Of("zebras") == 2311424180)
+
+
+def Test_Axes_And_Groups(fixture: Fixture) -> None:
+    sample = tokens.Split(SAVANNA)
+    book = kinds.Built(sample)
+    options = company.Settings()
+    options.every_word = True
+    table = company.Built(sample, book, options)
+    basis = axes.Found(table.rows, 2)
+    points = [axes.Projected(basis, row) for row in table.rows]
+    Check(fixture, "two axes of length 1, at right angles",
+          len(basis.axes) == 2 and abs(vectors.Length(basis.axes[0]) - 1.0) < 1.0e-9
+          and abs(vectors.Length(basis.axes[1]) - 1.0) < 1.0e-9 and abs(vectors.Dot(basis.axes[0], basis.axes[1])) < 1.0e-9)
+    Check(fixture, "44 counts become 2 numbers, and words of the same company land on the same spot",
+          len(points[0]) == 2 and abs(points[0][0] + 0.39642464446861586) < 1.0e-6
+          and abs(points[2][0] - points[3][0]) < 1.0e-9 and abs(points[2][1] - points[3][1]) < 1.0e-9)
+    Check(fixture, "three groups from the two numbers: zebras and antelopes together, lions with gazelles",
+          groups.Grouped(points, 3) == [1, 3, 2, 2, 3, 1])
+    whole = groups.Grouped(table.rows, 3)
+    Check(fixture, "three groups from all 44 counts: zebras and antelopes are still together",
+          whole[2] == 2 and whole[3] == 2 and whole[4] == 3 and whole[0] == 1)
+
+
 def Main() -> None:
     fixture = Fixture()
     groups = [
@@ -946,6 +1003,8 @@ def Main() -> None:
         ("Settling", Test_Settling),
         ("Evidence and the curved dial", Test_Evidence),
         ("Vectors", Test_Vectors),
+        ("The company a word keeps", Test_Company),
+        ("Main axes and groups", Test_Axes_And_Groups),
         ]
     for title, group in groups:
         print(title)

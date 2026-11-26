@@ -20,6 +20,7 @@
 --
 --  It mirrors reference/calipso_ref/vectors.py.
 
+with Ada.Containers.Indefinite_Vectors;
 with Ada.Numerics.Long_Complex_Types;
 
 package Calipso.Vectors is
@@ -27,6 +28,15 @@ package Calipso.Vectors is
     type Vector is array (Positive range <>) of Long_Float;
 
     subtype Complex is Ada.Numerics.Long_Complex_Types.Complex;
+
+    package Vector_Lists is new Ada.Containers.Indefinite_Vectors (
+            Index_Type   => Positive,
+            Element_Type => Vector
+            );
+
+    subtype Vector_List is Vector_Lists.Vector;
+    --# Many vectors, one after another. They may be of any length; the packages
+    --# that use a list expect them all to be of the same length.
 
     function "+" (
             Left  : in Vector;
