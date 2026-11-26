@@ -64,6 +64,8 @@ package Calipso.Web_Sources is
         --# How many addresses it can remember having seen.
         Time_Limit     : Duration := 0.0;
         --# After this long, no new page is asked for. 0 = no limit.
+        Stay_Under     : Ada.Strings.Unbounded.Unbounded_String := Ada.Strings.Unbounded.Null_Unbounded_String;
+        --# Follow only links whose path starts like this, for example "/wiki/". Empty = any path.
         end record;
 
     type Tally is record

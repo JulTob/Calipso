@@ -168,10 +168,12 @@ The panel answers only your own computer.
 
 ## The scraper's manners
 
-- It reads each site's `robots.txt` first and obeys it.
+- It reads each site's `robots.txt` first and obeys it. An address is checked
+  at the door: one the rules close never takes a seat in the waiting list.
 - It waits at least a second between requests, more if the site asks, and it
   studies a whole page before asking for the next.
 - It never asks for the same address twice, and stays on the site it was sent to.
+  With `under=/wiki/` it also stays under that path of the site.
 - It introduces itself by name to every site.
 - It does not download pictures, films or sounds: it files their addresses.
 
@@ -188,7 +190,8 @@ The workflow **Train a brain** does the same on GitHub's machines. In the
 
 | Field | Meaning |
 |---|---|
-| address | where to start |
+| address | where to start: one address, or a list kept in the repository (`seeds/wikipedia_es.txt`) |
+| under | follow only links whose path starts like this (`/wiki/`); empty for any path |
 | brain | the name of the brain; the same name carries on next time |
 | minutes | how long to train (at most 300) |
 | pages, list | the most pages to read, and the size of the waiting list |
@@ -223,6 +226,53 @@ global meaning yet**: no brain here can write a paragraph that justifies its
 ending. That needs neurons that combine what they see over a long distance.
 See [docs/DESIGN.md](docs/DESIGN.md), sections 10 and 11.
 
+Start lists live in `seeds/` (see `seeds/README.md`). One list is one site and
+one language, so each list grows its own brain.
+
+## Two ways of writing
+
+    ./bin/calipso_write data/sample_es.txt method=flat
+    ./bin/calipso_write data/sample_es.txt method=spell
+    ./bin/calipso_write data/sample_es.txt method=pick
+
+- **flat** is the method Calipso started with: one canvas of letters, all holes.
+- **spell** and **pick** are the *pyramid*. First a canvas of **kinds of word**
+  is collapsed: the plan of the sentence. Then the plan becomes a letter
+  template. With *spell* the letter brain writes each unusual word inside a
+  box (so many letters, this ending). With *pick* a word seen in that kind is
+  taken.
+
+Both ways use the same engine and the same brains. A kind of word is a symbol,
+exactly as a letter is. The numbers are in experiment E11.
+
+## Changing a text and letting it settle
+
+    ./bin/calipso_settle data/sample_es.txt "En la boca vixen muchas bactemias."
+    ./bin/calipso_settle data/sample_es.txt "Los gatos duermen mucho." pin=5:p signed=0.5
+    ./bin/calipso_settle data/sample_es.txt "En la boca vixen muchas bacterias." wrong=14 sure=1
+
+Every letter has a **dial**: how sure we are that it is right. It can be said
+on two scales, `sure=` from 0 to 1 (a chance) or `signed=` from -1 (surely
+wrong) through 0 (no idea) to 1 (surely right). `pin=` writes letters that are
+certain; `wrong=` marks a letter that must change. The text is then read again
+and again until nothing changes. See experiment E12.
+
+`model=curved` reads the signed dial as the tanh of half the evidence instead
+of two straight lines. Design section 15 says how the three scales (evidence,
+signed, chance) turn into each other.
+
+## Kinds by shape or by company
+
+    ./bin/calipso_kinds alike tests/data/savanna.txt zebras antelopes lions grass
+    ./bin/calipso_kinds exam BOOK.txt
+    ./bin/calipso_kinds exam BOOK.txt kinds=company
+    ./bin/calipso_kinds exam BOOK.txt kinds=company axes=24 reach=2 context=words
+
+`alike` describes every word by the company it keeps and says how alike two
+words are. `exam` hides words in the last tenth of a text and counts how often
+the level of kinds gets them back, with the kinds decided the way you say.
+Every step is a module with its own settings: design section 16, experiment E14.
+
 ## Project map
 
 ```
@@ -239,6 +289,9 @@ The game        Canvases  Templates  Oracles  Collapsing  Criteria  Repairing  B
 The brains      Brains  Neurons  Neuron_Kinds  Bias_Neurons  Basis_Neurons  Counting_Neurons
                 Counting_Oracles  Fragment_Counts  Records
 The text        Alphabets  Texts  Sources  Memory_Sources  File_Sources
+The levels      Tokens  Kinds  Boxed_Oracles  Pyramids  Writers
+The dial        Certainties  Anchored_Oracles  Settling
+The algebra     Vectors  Company  Axes  Groups  Kind_Makers  Word_Exams
 The web         Web_Addresses  Pages  Robots  Fetchers  Curl_Fetchers  Folder_Fetchers
                 Web_Sources  Web_Servers  Panels
 Small tools     Distributions  Numbers  Random_Sources  Console

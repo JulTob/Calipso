@@ -13,15 +13,21 @@ with Ada.Command_Line;
 with Ada.Containers;
 with Ada.Directories;
 with Ada.Exceptions;
+with Ada.Strings.Unbounded;
 with Ada.Strings.Wide_Wide_Unbounded;
 
 with Calipso.Alphabets;
+with Calipso.Anchored_Oracles;
+with Calipso.Axes;
 with Calipso.Basis_Neurons;
 with Calipso.Bias_Neurons;
 with Calipso.Blind_Spots;
+with Calipso.Boxed_Oracles;
 with Calipso.Brains;
 with Calipso.Canvases;
+with Calipso.Certainties;
 with Calipso.Collapsing;
+with Calipso.Company;
 with Calipso.Console;
 with Calipso.Counting_Neurons;
 with Calipso.Counting_Oracles;
@@ -30,20 +36,29 @@ with Calipso.Distributions;
 with Calipso.File_Sources;
 with Calipso.Folder_Fetchers;
 with Calipso.Fragment_Counts;
+with Calipso.Groups;
+with Calipso.Kind_Makers;
+with Calipso.Kinds;
 with Calipso.Memory_Sources;
 with Calipso.Neuron_Kinds;
 with Calipso.Neurons;
 with Calipso.Numbers;
 with Calipso.Oracles;
 with Calipso.Pages;
+with Calipso.Pyramids;
 with Calipso.Random_Sources;
 with Calipso.Records;
 with Calipso.Repairing;
 with Calipso.Robots;
+with Calipso.Settling;
 with Calipso.Templates;
 with Calipso.Texts;
+with Calipso.Tokens;
+with Calipso.Vectors;
 with Calipso.Web_Addresses;
 with Calipso.Web_Sources;
+with Calipso.Word_Exams;
+with Calipso.Writers;
 
 procedure Calipso_Tests is
 
@@ -51,8 +66,15 @@ procedure Calipso_Tests is
     use type Ada.Containers.Hash_Type;
     use type Canvases.Cell_State;
     use type Distributions.Distribution;
+    use type Certainties.Certainty;
+    use type Certainties.Evidence;
+    use type Company.Hash_Number;
+    use type Certainties.Signed_Certainty;
+    use type Kinds.Kind_Family;
     use type Pages.Block_Kind;
     use type Texts.Symbol_Text;
+    use type Tokens.Token_Sort;
+    use type Vectors.Vector;
     use type Web_Addresses.Content_Kind;
 
     package Wide_Texts renames Ada.Strings.Wide_Wide_Unbounded;
@@ -71,6 +93,7 @@ procedure Calipso_Tests is
     Test_Site    : constant String := "http://test.site";
     Site_Folder  : constant String := "tests/site";
     Page_Work_File : constant String := "page_test_work.tmp";
+    Pyramid_Corpus : constant String := "data/sample_es.txt";
     --# The tests are run from the top folder of the project.
     Tolerance    : constant Long_Float := 1.0E-9;
 
@@ -784,6 +807,530 @@ procedure Calipso_Tests is
         Check ("rules that could not be read: nothing is allowed", not Robots.Allows (Robots.Allow_Nothing, "/x"));
         end Test_Robots;
 
+    function Code_Sum (
+            Text : in Wide_Wide_String
+            ) return Natural is
+        Total : Long_Long_Integer := 0;
+        Place : Long_Long_Integer := 1;
+        begin
+        for Char of Text loop
+            Total := (Total + Place * Wide_Wide_Character'Pos (Char)) mod 1_000_003;
+            Place := Place + 1;
+            end loop;
+        return Natural (Total);
+        end Code_Sum;
+    --# A number that changes if any letter changes or moves: it lets a test check a whole text.
+
+    procedure Test_Tokens is
+        Feed  : constant Wide_Wide_String := Tokens.Break_Text;
+        Found : constant Tokens.Token_List :=
+            Tokens.Split ("Hola, mundo (2024)." & Feed & Feed & "Fin de la  prueba" & Feed & "final.");
+        begin
+        Check ("a text of 14 tokens", Natural (Found.Length) = 14);
+        Check (
+            "words, marks and numbers are told apart",
+            Found.Element (1) = "Hola" and then Found.Element (2) = "," and then Found.Element (5) = "2024"
+            );
+        Check (
+            "a blank line is a break",
+            Found.Element (8) = Tokens.Break_Text and then Tokens.Sort_Of (Found.Element (8)) = Tokens.Break
+            );
+        Check (
+            "a lone end of line is only a blank",
+            Found.Element (12) = "prueba" and then Found.Element (13) = "final"
+            );
+        Check ("an empty text has no tokens", Tokens.Split ("").Is_Empty);
+        end Test_Tokens;
+
+    procedure Test_Kinds is
+        Whole  : constant Wide_Wide_String := Wide_Texts.To_Wide_Wide_String (Texts.Whole_Text (Pyramid_Corpus));
+        Sample : constant Tokens.Token_List := Tokens.Split (Whole);
+        Book   : constant Kinds.Book := Kinds.Built (Sample);
+        Shape  : constant Symbol := Kinds.Kind_Of (Book, "abcdes");
+        Dice   : Random_Sources.Generator := Random_Sources.Seeded (5);
+        First  : Texts.Wide_Text;
+        Second : Texts.Wide_Text;
+        Third  : Texts.Wide_Text;
+        begin
+        Check (
+            "the sample has 1892 tokens and gives 216 kinds",
+            Natural (Sample.Length) = 1_892 and then Kinds.Kind_Count (Book) = 216
+            );
+        Check (
+            "a mark is its own kind",
+            Kinds.Kind_Of (Book, ".") = 2 and then Kinds.Family_Of (Book, 2) = Kinds.Mark_Kind
+            );
+        Check (
+            "a number is known by how many digits it has",
+            Kinds.Kind_Of (Book, "7") = 5 and then Kinds.Kind_Of (Book, "1704") = 8
+            and then Kinds.Kind_Of (Book, "123456") = 8 and then Kinds.Figures_Of (Book, 8) = 4
+            );
+        Check (
+            "a usual word is its own kind",
+            Kinds.Kind_Of (Book, "de") = 12 and then Kinds.Text_Of (Book, 12) = "de"
+            and then Kinds.Family_Of (Book, 12) = Kinds.Word_Kind
+            );
+        Check (
+            "a word never seen still has a kind: its shape",
+            Shape = 154 and then Kinds.Family_Of (Book, Shape) = Kinds.Shape_Kind
+            and then Kinds.Text_Of (Book, Shape) = "es" and then not Kinds.Is_Capital (Book, Shape)
+            );
+        Check (
+            "a capital letter makes another shape",
+            Kinds.Kind_Of (Book, "Zaragoza") = 195 and then Kinds.Is_Capital (Book, 195)
+            );
+        Check ("a mark never seen is unknown", Kinds.Kind_Of (Book, "@") = Unknown);
+        Kinds.Draw_Member (Book, Shape, Dice, First);
+        Kinds.Draw_Member (Book, Shape, Dice, Second);
+        Kinds.Draw_Member (Book, Shape, Dice, Third);
+        Check (
+            "words are drawn from those seen in a shape",
+            Wide_Texts.To_Wide_Wide_String (First) = "lugares"
+            and then Wide_Texts.To_Wide_Wide_String (Second) = "entonces"
+            and then Wide_Texts.To_Wide_Wide_String (Third) = "errores"
+            );
+        end Test_Kinds;
+
+    procedure Test_Boxed_Oracles is
+        Belief  : Distributions.Distribution := Distributions.Zero (4);
+        Allowed : Boxed_Oracles.Permission := (others => False);
+        begin
+        Distributions.Set_Weight (Belief, 1, 0.1);
+        Distributions.Set_Weight (Belief, 2, 0.5);
+        Distributions.Set_Weight (Belief, 3, 0.3);
+        Distributions.Set_Weight (Belief, 4, 0.1);
+        Check (
+            "a rule that allows nothing is not applied",
+            Distributions.Weight_Of (Boxed_Oracles.Kept_Part (Belief, Allowed), 2) = 0.5
+            );
+        Allowed (2) := True;
+        Allowed (3) := True;
+        declare
+            Kept : constant Distributions.Distribution := Boxed_Oracles.Kept_Part (Belief, Allowed);
+            begin
+            Check (
+                "what is not allowed loses all its weight",
+                Distributions.Weight_Of (Kept, 1) = 0.0 and then Distributions.Weight_Of (Kept, 4) = 0.0
+                );
+            Check (
+                "what is allowed keeps its proportions",
+                abs (Distributions.Weight_Of (Kept, 2) - 0.625) < 1.0E-12
+                and then abs (Distributions.Weight_Of (Kept, 3) - 0.375) < 1.0E-12
+                );
+            end;
+        Distributions.Set_Weight (Belief, 2, 0.0);
+        Distributions.Set_Weight (Belief, 3, 0.0);
+        declare
+            Kept : constant Distributions.Distribution := Boxed_Oracles.Kept_Part (Belief, Allowed);
+            begin
+            Check (
+                "when the brain gives no chance to anything allowed, every allowed symbol is as good as another",
+                Distributions.Weight_Of (Kept, 2) = 0.5 and then Distributions.Weight_Of (Kept, 3) = 0.5
+                );
+            end;
+        end Test_Boxed_Oracles;
+
+    procedure Check_Writer (
+            Name     : in String;
+            Author   : in Writers.Writer'Class;
+            Length   : in Natural;
+            Checksum : in Natural
+            ) is
+        Dice   : Random_Sources.Generator := Random_Sources.Seeded (3);
+        Result : Texts.Wide_Text;
+        begin
+        Author.Write (Dice, 10, Result);
+        Check (
+            Name,
+            Wide_Texts.Length (Result) = Length and then Code_Sum (Wide_Texts.To_Wide_Wide_String (Result)) = Checksum
+            );
+        end Check_Writer;
+    --# Any writer, asked for about 10 words with the same dice, must give the text the reference gives.
+
+    procedure Test_Pyramids is
+        Letters : Alphabets.Alphabet;
+        Speller : aliased Counting_Oracles.Counting_Oracle;
+        Plan    : aliased Pyramids.Pyramid;
+        begin
+        Texts.Learn_Alphabet (Pyramid_Corpus, Letters);
+        Counting_Oracles.Train (Speller, Texts.Read_Symbols (Pyramid_Corpus, Letters), Alphabets.Size (Letters));
+        Pyramids.Study (Plan, Wide_Texts.To_Wide_Wide_String (Texts.Whole_Text (Pyramid_Corpus)));
+        Check ("the pyramid decides 216 kinds from the sample", Kinds.Kind_Count (Pyramids.Book_Of (Plan)) = 216);
+        declare
+            Flat   : Writers.Flat_Writer (Speller'Access);
+            Spelt  : Writers.Pyramid_Writer (Plan'Access, Speller'Access);
+            Picked : Writers.Pyramid_Writer (Plan'Access, Speller'Access);
+            begin
+            Flat.Letters := Letters;
+            Spelt.Letters := Letters;
+            Picked.Letters := Letters;
+            Picked.Passing := Pyramids.Pick;
+            Check_Writer ("the flat writer: one level, letters only", Flat, 60, 178_548);
+            Check_Writer ("the pyramid writer that spells: kinds first, then letters in boxes", Spelt, 44, 90_950);
+            Check_Writer ("the pyramid writer that picks: kinds first, then a word seen in that kind", Picked, 44, 94_546);
+            end;
+        end Test_Pyramids;
+
+    procedure Test_Certainties is
+        begin
+        Check (
+            "on the signed dial, +1 is right, 0 is no idea and -1 is wrong",
+            Certainties.Certainty_Of (Certainties.Surely_Right, 100) = 1.0
+            and then Certainties.Certainty_Of (Certainties.No_Idea, 100) = Certainties.Chance_Level (100)
+            and then Certainties.Certainty_Of (Certainties.Surely_Wrong, 100) = 0.0
+            );
+        Check (
+            "no idea is one chance in the size of the alphabet",
+            abs (Long_Float (Certainties.Chance_Level (100)) - 0.01) < 1.0E-12
+            );
+        Check (
+            "half way up the signed dial is half way from no idea to right",
+            abs (Long_Float (Certainties.Certainty_Of (0.5, 100)) - 0.505) < 1.0E-12
+            );
+        Check (
+            "half way down the signed dial is half way from no idea to wrong",
+            abs (Long_Float (Certainties.Certainty_Of (-0.5, 100)) - 0.005) < 1.0E-12
+            );
+        Check (
+            "the two scales turn into each other and back",
+            abs (Long_Float (Certainties.Signed_Of (0.505, 100)) - 0.5) < 1.0E-12
+            and then abs (Long_Float (Certainties.Signed_Of (0.005, 100)) + 0.5) < 1.0E-12
+            );
+        end Test_Certainties;
+
+    procedure Test_Anchored_Oracles is
+        Belief : Distributions.Distribution := Distributions.Zero (4);
+        begin
+        Distributions.Set_Weight (Belief, 1, 0.1);
+        Distributions.Set_Weight (Belief, 2, 0.5);
+        Distributions.Set_Weight (Belief, 3, 0.3);
+        Distributions.Set_Weight (Belief, 4, 0.1);
+        Check (
+            "a sure memory pulls the opinion toward the symbol the cell had",
+            abs (Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 0.9)), 3)
+                 - 0.9204545454545453) < 1.0E-12
+            );
+        Check (
+            "a certainty of 1 keeps the symbol whatever the brain thinks",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 1.0)), 3) = 1.0
+            );
+        Check (
+            "a certainty of 0 forbids the symbol and leaves the rest to the brain",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 0.0)), 3) = 0.0
+            and then abs (Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 0.0)), 2)
+                          - 0.7142857142857143) < 1.0E-12
+            );
+        Check (
+            "no idea changes nothing: on the signed dial that is 0",
+            abs (Distributions.Weight_Of (
+                     Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, Certainties.No_Idea, 4)), 3
+                     ) - 0.3) < 1.0E-12
+            );
+        Check (
+            "a free cell passes the opinion untouched",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Free_Anchor), 2) = 0.5
+            );
+        Distributions.Set_Weight (Belief, 3, 0.0);
+        Check (
+            "sure of a symbol the brain denies: the memory decides alone",
+            Distributions.Weight_Of (Anchored_Oracles.Pulled (Belief, Anchored_Oracles.Anchor_Of (3, 1.0)), 3) = 1.0
+            );
+        end Test_Anchored_Oracles;
+
+    procedure Settle_Text (
+            Speller : in     Counting_Oracles.Counting_Oracle;
+            Letters : in     Alphabets.Alphabet;
+            Symbols : in     Texts.Symbol_Text;
+            Anchors : in     Anchored_Oracles.Anchor_List;
+            Result  :    out Texts.Wide_Text;
+            Outcome :    out Settling.Report
+            ) is
+        Board : Canvases.Canvas := Settling.Written (Symbols);
+        Final : Texts.Symbol_Text;
+        begin
+        Settling.Settle (Board, Speller, Anchors, Outcome);
+        for Position in 1 .. Canvases.Length (Board) loop
+            Final.Append (Canvases.Symbol_At (Board, Position));
+            end loop;
+        Result := Wide_Texts.To_Unbounded_Wide_Wide_String (Texts.Decoded (Final, Letters));
+        end Settle_Text;
+    --# Writes the symbols on a canvas, settles it, and gives back the text and the report.
+
+    procedure Test_Settling is
+        Letters : Alphabets.Alphabet;
+        Speller : Counting_Oracles.Counting_Oracle;
+        Size    : Symbol;
+        Symbols : Texts.Symbol_Text;
+        Anchors : Anchored_Oracles.Anchor_List;
+        Result  : Texts.Wide_Text;
+        Outcome : Settling.Report;
+        begin
+        Texts.Learn_Alphabet (Pyramid_Corpus, Letters);
+        Size := Alphabets.Size (Letters);
+        Counting_Oracles.Train (Speller, Texts.Read_Symbols (Pyramid_Corpus, Letters), Size);
+        Check ("the alphabet of the sample has 51 symbols", Size = 51);
+
+        Symbols := Texts.Encoded ("En la boca vixen muchas bactemias.", Letters);
+        Anchors := Settling.Even_Anchors (Symbols, Certainties.Certainty_Of (0.99, Size));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "two wrong letters nobody pointed at are found and mended",
+            Wide_Texts.To_Wide_Wide_String (Result) = "En la boca viven muchas bacterias."
+            and then Outcome.Passes = 2 and then Outcome.Changes = 2 and then Outcome.Is_Settled
+            );
+
+        Anchors := Settling.Even_Anchors (Symbols, Certainties.Certainty_Of (Certainties.No_Idea, Size));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "with no idea of any letter the whole text is rewritten",
+            Wide_Texts.To_Wide_Wide_String (Result) = "ue se hacerse en muchos dos y la v"
+            and then Outcome.Passes = 7 and then Outcome.Changes = 32 and then Outcome.Is_Settled
+            );
+
+        Symbols := Texts.Encoded ("En la boca vixen muchas bacterias.", Letters);
+        Anchors := Settling.Even_Anchors (Symbols, 1.0);
+        Anchors.Replace_Element (14, Anchored_Oracles.Anchor_Of (Symbols.Element (14), Certainties.Surely_Wrong, Size));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "a letter marked surely wrong is the only one that changes",
+            Wide_Texts.To_Wide_Wide_String (Result) = "En la boca viven muchas bacterias." and then Outcome.Changes = 1
+            );
+
+        Symbols := Texts.Encoded ("Los patos duermen mucho.", Letters);
+        Anchors := Settling.Even_Anchors (Symbols, Certainties.Certainty_Of (0.5, Size));
+        Anchors.Replace_Element (5, Anchored_Oracles.Anchor_Of (Symbols.Element (5), 1.0));
+        Settle_Text (Speller, Letters, Symbols, Anchors, Result, Outcome);
+        Check (
+            "a pinned letter stays where it was put while a looser neighbour moves",
+            Wide_Texts.To_Wide_Wide_String (Result) = "Los patos duermen muche." and then Outcome.Changes = 1
+            );
+        end Test_Settling;
+
+    procedure Test_Evidence is
+        Half     : constant Certainties.Signed_Certainty := 0.5;
+        Joined   : constant Certainties.Signed_Certainty := Half & 0.3;
+        Together : constant Certainties.Evidence := Certainties.To_Evidence (0.5) + Certainties.To_Evidence (0.3);
+        begin
+        Check (
+            "evidence 0 is no idea on every scale",
+            Certainties.Signed_From (0.0) = Certainties.No_Idea
+            and then abs (Long_Float (Certainties.Certainty_From (0.0, 100)) - 0.01) < 1.0E-12
+            );
+        Check (
+            "the signed dial is the tanh of half the evidence",
+            abs (Long_Float (Certainties.Signed_From (2.0)) - 0.7615941559557649) < 1.0E-12
+            );
+        Check (
+            "and back: 0.99 on the signed dial stands for 5.29 nats",
+            abs (Long_Float (Certainties.To_Evidence (0.99)) - 5.293304824724491) < 1.0E-9
+            );
+        Check (
+            "a chance of one half among 100 symbols is 4.6 nats above pure chance",
+            abs (Long_Float (Certainties.To_Evidence (0.5, 100)) - 4.59511985013459) < 1.0E-9
+            );
+        Check (
+            "two sources join: their evidence adds, on either scale",
+            abs (Long_Float (Certainties.Signed_From (Together)) - Long_Float (Joined)) < 1.0E-12
+            and then abs (Long_Float (Joined) - 0.6956521739130435) < 1.0E-12
+            );
+        Check (
+            "joining with no idea changes nothing, and opposite certainties cancel",
+            (Half & Certainties.No_Idea) = Half
+            and then (Half & (-0.5)) = Certainties.No_Idea
+            and then (Certainties.Surely_Right & Certainties.Surely_Wrong) = Certainties.No_Idea
+            );
+        Check (
+            "the curved model keeps the three fixed points of the dial",
+            Certainties.Certainty_Of (Certainties.Surely_Right, 100, Certainties.Curved) = 1.0
+            and then Certainties.Certainty_Of (Certainties.Surely_Wrong, 100, Certainties.Curved) = 0.0
+            and then abs (Long_Float (Certainties.Certainty_Of (Certainties.No_Idea, 100, Certainties.Curved)) - 0.01)
+                     < 1.0E-12
+            );
+        Check (
+            "between them the models differ: 0.5 is a chance of 0.505 when straight and 0.029 when curved",
+            abs (Long_Float (Certainties.Certainty_Of (Half, 100, Certainties.Straight)) - 0.505) < 1.0E-12
+            and then abs (Long_Float (Certainties.Certainty_Of (Half, 100, Certainties.Curved)) - 0.029411764705882366)
+                     < 1.0E-9
+            );
+        end Test_Evidence;
+
+    procedure Test_Vectors is
+        Before : constant Vectors.Vector := (1.0, 0.0, 0.0, 0.0);
+        After  : constant Vectors.Vector := (0.0, 0.0, 1.0, 0.0);
+        Mixed  : constant Vectors.Vector := (1.0, 0.0, 0.0, 1.0);
+        Other  : constant Vectors.Vector := (1.0, 0.0, 1.0, 0.0);
+        Low    : constant Vectors.Vector := (1.0, 2.0, 3.0);
+        High   : constant Vectors.Vector := (4.0, 5.0, 6.0);
+        Flat   : constant Vectors.Vector := (3.0, 4.0);
+        Dot    : constant Long_Float := Low * High;
+        Sum    : constant Vectors.Vector := Low + 2.0 * High;
+        begin
+        Check ("the dot product multiplies place by place and adds", Dot = 32.0);
+        Check ("adding and scaling work place by place", Sum = (9.0, 12.0, 15.0) and then High - Low = (3.0, 3.0, 3.0));
+        Check ("the length of (3, 4) is 5", Vectors.Length (Flat) = 5.0);
+        Check (
+            "the unit arrow has length 1",
+            abs (Vectors.Length (Vectors.Unit (Flat)) - 1.0) < 1.0E-12
+            );
+        Check (
+            "arrows at a right angle have cosine 0, opposite arrows -1, the same arrow +1",
+            Vectors.Cosine (Before, After) = 0.0
+            and then abs (Vectors.Cosine (Flat, (-1.0) * Flat) + 1.0) < 1.0E-12
+            and then abs (Vectors.Cosine (Flat, 2.0 * Flat) - 1.0) < 1.0E-12
+            );
+        Check (
+            "the complex product: its real part is the dot product",
+            Vectors.Complex_Product (Mixed, Other).Re = 1.0 and then Vectors.Complex_Product (Mixed, Other).Im = 1.0
+            );
+        Check (
+            "its imaginary part changes sign when the two are swapped: it holds order",
+            Vectors.Complex_Product (Before, After).Im = 1.0 and then Vectors.Complex_Product (After, Before).Im = -1.0
+            );
+        Check (
+            "the turn is +90 degrees one way, -90 the other, and 45 half way",
+            abs (Vectors.Turn (Before, After) - 90.0) < 1.0E-9
+            and then abs (Vectors.Turn (After, Before) + 90.0) < 1.0E-9
+            and then abs (Vectors.Turn (Mixed, Other) - 45.0) < 1.0E-9
+            );
+        end Test_Vectors;
+
+    Savanna : constant Wide_Wide_String :=
+        "Lions eat zebras. Lions eat antelopes. Zebras eat grass. Antelopes eat grass. Gazelles eat grass.";
+    --# Five small sentences in which two animals keep exactly the same company.
+
+    procedure Test_Company is
+        Sample  : constant Tokens.Token_List := Tokens.Split (Savanna);
+        Book    : constant Kinds.Book := Kinds.Built (Sample);
+        Options : Company.Settings;
+        begin
+        Options.Every_Word := True;
+        declare
+            Table : constant Company.Table := Company.Built (Sample, Book, Options);
+            begin
+            Check (
+                "six words, each described by 44 counts",
+                Company.Row_Count (Table) = 6 and then Company.Vector_At (Table, 1)'Length = 44
+                and then Company.Word_At (Table, 1) = "lions" and then Company.Seen_At (Table, 2) = 5
+                );
+            Check (
+                "zebras and antelopes keep the same company: cosine 1",
+                abs (Vectors.Cosine (Company.Vector_Of (Table, "zebras"), Company.Vector_Of (Table, "antelopes")) - 1.0)
+                < 1.0E-12
+                );
+            Check (
+                "lions and grass keep none in common: cosine 0, and a turn of 90 degrees says they stand on opposite sides",
+                Vectors.Cosine (Company.Vector_Of (Table, "lions"), Company.Vector_Of (Table, "grass")) = 0.0
+                and then abs (Vectors.Turn (Company.Vector_Of (Table, "lions"), Company.Vector_Of (Table, "grass")) + 90.0)
+                         < 1.0E-9
+                );
+            Check (
+                "a capital does not make another word, and a word seen once looks like the one it was seen like",
+                abs (Vectors.Cosine (Company.Vector_Of (Table, "Gazelles"), Company.Vector_Of (Table, "Lions"))
+                     - 0.9753386489714635) < 1.0E-9
+                );
+            end;
+        Options.Reach := 2;
+        Options.Context := Company.As_Words;
+        declare
+            Table : constant Company.Table := Company.Built (Sample, Book, Options);
+            begin
+            Check (
+                "looking two words each way, with neighbours counted as words: 1024 counts for each word",
+                Company.Vector_At (Table, 1)'Length = 1_024
+                and then abs (Vectors.Cosine (Company.Vector_Of (Table, "zebras"), Company.Vector_Of (Table, "antelopes"))
+                              - 0.75) < 1.0E-9
+                );
+            end;
+        Check ("the scrambled number of a word", Company.Hash_Of ("zebras") = 2_311_424_180);
+        end Test_Company;
+
+    procedure Test_Axes_And_Groups is
+        Sample  : constant Tokens.Token_List := Tokens.Split (Savanna);
+        Book    : constant Kinds.Book := Kinds.Built (Sample);
+        Options : Company.Settings;
+        Points  : Vectors.Vector_List;
+        begin
+        Options.Every_Word := True;
+        declare
+            Table : constant Company.Table := Company.Built (Sample, Book, Options);
+            Basis : constant Axes.Basis := Axes.Found (Company.Rows_Of (Table), 2);
+            First : constant Vectors.Vector := Axes.Axis_At (Basis, 1);
+            Next  : constant Vectors.Vector := Axes.Axis_At (Basis, 2);
+            Sides : constant Long_Float := First * Next;
+            begin
+            for Row in 1 .. Company.Row_Count (Table) loop
+                Points.Append (Axes.Projected (Basis, Company.Vector_At (Table, Row)));
+                end loop;
+            Check (
+                "two axes of length 1, at right angles",
+                Axes.Axis_Count (Basis) = 2 and then abs (Vectors.Length (First) - 1.0) < 1.0E-9
+                and then abs (Vectors.Length (Next) - 1.0) < 1.0E-9 and then abs Sides < 1.0E-9
+                );
+            Check (
+                "44 counts become 2 numbers, and words of the same company land on the same spot",
+                Points.Element (1)'Length = 2
+                and then abs (Points.Element (1) (1) + 0.39642464446861586) < 1.0E-6
+                and then abs (Points.Element (3) (1) - Points.Element (4) (1)) < 1.0E-9
+                and then abs (Points.Element (3) (2) - Points.Element (4) (2)) < 1.0E-9
+                );
+            declare
+                Numbers : constant Groups.Group_Numbers := Groups.Grouped (Points, 3);
+                Whole   : constant Groups.Group_Numbers := Groups.Grouped (Company.Rows_Of (Table), 3);
+                begin
+                Check (
+                    "three groups from the two numbers: zebras and antelopes together, lions with gazelles",
+                    Numbers.Element (1) = 1 and then Numbers.Element (2) = 3 and then Numbers.Element (3) = 2
+                    and then Numbers.Element (4) = 2 and then Numbers.Element (5) = 3 and then Numbers.Element (6) = 1
+                    );
+                Check (
+                    "three groups from all 44 counts: zebras and antelopes are still together",
+                    Whole.Element (3) = 2 and then Whole.Element (4) = 2 and then Whole.Element (5) = 3
+                    and then Whole.Element (1) = 1
+                    );
+                end;
+            end;
+        end Test_Axes_And_Groups;
+
+    procedure Check_Word_Exam (
+            Name    : in String;
+            Options : in Kind_Makers.Settings;
+            Count   : in Natural;
+            Right   : in Natural
+            ) is
+        Whole   : constant Wide_Wide_String := Wide_Texts.To_Wide_Wide_String (Texts.Whole_Text (Pyramid_Corpus));
+        Cut     : constant Natural := (Whole'Length * 9) / 10;
+        Studied : constant Wide_Wide_String := Whole (Whole'First .. Whole'First + Cut - 1);
+        Unseen  : constant Wide_Wide_String := Whole (Whole'First + Cut .. Whole'Last);
+        Plan    : Pyramids.Pyramid;
+        Outcome : Word_Exams.Result;
+        begin
+        Pyramids.Study (Plan, Studied, Options);
+        Outcome := Word_Exams.Exam (Plan, Tokens.Split (Studied), Tokens.Split (Unseen), 3);
+        Check (
+            Name,
+            Natural (Kinds.Kind_Count (Pyramids.Book_Of (Plan))) = Count
+            and then Outcome.Asked = 56 and then Outcome.Right = Right
+            );
+        end Check_Word_Exam;
+    --# Studies nine tenths of the sample with the kinds decided as Options says, and gives the exam on the rest.
+
+    procedure Test_Kind_Makers is
+        Options : Kind_Makers.Settings;
+        begin
+        Check_Word_Exam ("kinds by shape: 216 kinds, 18 of 56 hidden words rebuilt", Options, 216, 18);
+        Options.Way := Kind_Makers.By_Company;
+        Options.Axis_Count := 4;
+        Options.Rounds := 5;
+        Options.Group_Count := 12;
+        Check_Word_Exam ("kinds by company, 4 axes and 12 groups: 148 kinds, 17 of 56", Options, 148, 17);
+        Options.Axis_Count := 3;
+        Options.Rounds := 3;
+        Options.Neighbours.Reach := 2;
+        Options.Neighbours.Context := Company.As_Words;
+        Options.Neighbours.Fold_Case := False;
+        Check_Word_Exam ("neighbours counted as words, two each way, capitals kept: 148 kinds, 17 of 56", Options, 148, 17);
+        end Test_Kind_Makers;
+
     procedure Test_Web_Sources is
         Common     : constant Alphabets.Alphabet := Alphabets.Common_Letters;
         Options    : Web_Sources.Settings;
@@ -848,6 +1395,34 @@ procedure Calipso_Tests is
             "a waiting list of 2: 3 links are left out",
             Counts.Left_Out = 3 and then Web_Sources.Waiting_Count (Reader) = 0
             );
+
+        Options.List_Size := 1_024;
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/private/secret.html");
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check (
+            "an address the site's rules close is stopped at the door: it never waits in the list",
+            Counts.Refused = 1 and then Web_Sources.Waiting_Count (Reader) = 0
+            );
+        Web_Sources.Add_Address (Reader, Test_Site & "/a.html");
+        Check ("an address the rules allow takes its seat", Web_Sources.Waiting_Count (Reader) = 1);
+        if Ada.Directories.Exists (Page_Work_File) then
+            Ada.Directories.Delete_File (Page_Work_File);
+            end if;
+
+        Options.Stay_Under := Ada.Strings.Unbounded.To_Unbounded_String ("/sub/");
+        Web_Sources.Open (Reader, Site, Common, Options, Page_Work_File);
+        Web_Sources.Add_Address (Reader, Test_Site & "/index.html");
+        loop
+            Reader.Next_Piece (Piece, Found);
+            exit when not Found;
+            end loop;
+        Ada.Directories.Delete_File (Page_Work_File);
+        Counts := Web_Sources.Tally_Of (Reader);
+        Check (
+            "told to stay under /sub/: only the start page and the page under /sub/ are read",
+            Counts.Asked = 2 and then Counts.Read = 2 and then Counts.Letters = 682
+            );
         end Test_Web_Sources;
 
     begin
@@ -871,6 +1446,18 @@ procedure Calipso_Tests is
     Run_Group ("Pages", Test_Pages'Access);
     Run_Group ("Site rules", Test_Robots'Access);
     Run_Group ("Web source", Test_Web_Sources'Access);
+    Run_Group ("Tokens", Test_Tokens'Access);
+    Run_Group ("Kinds of token", Test_Kinds'Access);
+    Run_Group ("Boxed oracle", Test_Boxed_Oracles'Access);
+    Run_Group ("Pyramid and writers", Test_Pyramids'Access);
+    Run_Group ("The dial", Test_Certainties'Access);
+    Run_Group ("Anchored oracle", Test_Anchored_Oracles'Access);
+    Run_Group ("Settling", Test_Settling'Access);
+    Run_Group ("Evidence and the curved dial", Test_Evidence'Access);
+    Run_Group ("Vectors", Test_Vectors'Access);
+    Run_Group ("The company a word keeps", Test_Company'Access);
+    Run_Group ("Main axes and groups", Test_Axes_And_Groups'Access);
+    Run_Group ("Ways of deciding kinds", Test_Kind_Makers'Access);
     Console.Put_Line ("");
     Console.Put_Line ("Failures: " & Console.Image (Failures) & "   Notes: " & Console.Image (Warnings));
     if Failures > 0 then

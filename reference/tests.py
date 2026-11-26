@@ -11,29 +11,43 @@ import sys
 
 from calipso_ref import UNKNOWN
 from calipso_ref import alphabets
+from calipso_ref import anchored_oracles
+from calipso_ref import axes
 from calipso_ref import basis_neurons
 from calipso_ref import bias_neurons
 from calipso_ref import blind_spots
+from calipso_ref import boxed_oracles
 from calipso_ref import brains
 from calipso_ref import canvases
+from calipso_ref import certainties
 from calipso_ref import collapsing
+from calipso_ref import company
 from calipso_ref import counting_neurons
 from calipso_ref import counting_oracles
 from calipso_ref import criteria
 from calipso_ref import distributions
 from calipso_ref import fetchers
 from calipso_ref import fragment_counts
+from calipso_ref import groups
+from calipso_ref import kind_makers
+from calipso_ref import kinds
 from calipso_ref import neuron_kinds
 from calipso_ref import pages
+from calipso_ref import pyramids
 from calipso_ref import random_sources
 from calipso_ref import records
 from calipso_ref import repairing
 from calipso_ref import robots
+from calipso_ref import settling
 from calipso_ref import sources
 from calipso_ref import templates
 from calipso_ref import texts
+from calipso_ref import tokens
+from calipso_ref import vectors
 from calipso_ref import web_addresses
 from calipso_ref import web_sources
+from calipso_ref import word_exams
+from calipso_ref import writers
 
 CORPUS_TEXT = (
     "la casa de la costa es la casa de la rosa. la rosa de la casa es la cosa de la costa. "
@@ -49,6 +63,7 @@ SAMPLE_FILE = "data/sample_es.txt"
 TEST_SITE = "http://test.site"
 SITE_FOLDER = "tests/site"
 PAGE_WORK_FILE = "page_test_work.tmp"
+PYRAMID_CORPUS = "data/sample_es.txt"
 #-- The tests are run from the top folder of the project.
 TOLERANCE = 1.0e-9
 
@@ -667,6 +682,323 @@ def Test_Web_Sources(
     Check(fixture, "a waiting list of 2: the 4 pages are still read", tally.asked == 4 and tally.read == 4)
     Check(fixture, "a waiting list of 2: 3 links are left out", tally.left_out == 3 and web_sources.Waiting_Count(source) == 0)
 
+    settings.list_size = 1024
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/private/secret.html")
+    Check(fixture, "an address the site's rules close is stopped at the door: it never waits in the list",
+          source.tally.refused == 1 and web_sources.Waiting_Count(source) == 0)
+    web_sources.Add_Address(source, TEST_SITE + "/a.html")
+    Check(fixture, "an address the rules allow takes its seat", web_sources.Waiting_Count(source) == 1)
+    if os.path.exists(PAGE_WORK_FILE):
+        os.remove(PAGE_WORK_FILE)
+
+    settings.stay_under = "/sub/"
+    web_sources.Open(source, fetchers.Folder_Fetcher(TEST_SITE, SITE_FOLDER), letters, settings, PAGE_WORK_FILE)
+    web_sources.Add_Address(source, TEST_SITE + "/index.html")
+    while True:
+        piece, found = source.Next_Piece()
+        if not found:
+            break
+    os.remove(PAGE_WORK_FILE)
+    tally = source.tally
+    Check(fixture, "told to stay under /sub/: only the start page and the page under /sub/ are read",
+          tally.asked == 2 and tally.read == 2 and tally.letters == 682)
+
+
+def Code_Sum(text: str) -> int:
+    #-- A number that changes if any letter changes or moves: it lets a test check a whole text.
+    total = 0
+    place = 1
+    for char in text:
+        total = (total + place * ord(char)) % 1000003
+        place = place + 1
+    return total
+
+
+def Test_Tokens(fixture: Fixture) -> None:
+    found = tokens.Split("Hola, mundo (2024).\n\nFin de la  prueba\nfinal.")
+    Check(fixture, "a text of 14 tokens", len(found) == 14)
+    Check(fixture, "words, marks and numbers are told apart", found[0] == "Hola" and found[1] == "," and found[4] == "2024")
+    Check(fixture, "a blank line is a break", found[7] == tokens.BREAK_TEXT and tokens.Sort_Of(found[7]) == tokens.BREAK)
+    Check(fixture, "a lone end of line is only a blank", found[11] == "prueba" and found[12] == "final")
+    Check(fixture, "an empty text has no tokens", len(tokens.Split("")) == 0)
+
+
+def Test_Kinds(fixture: Fixture) -> None:
+    sample = tokens.Split(texts.Whole_Text(PYRAMID_CORPUS))
+    book = kinds.Built(sample)
+    shape = kinds.Kind_Of(book, "abcdes")
+    dice = random_sources.Seeded(5)
+    Check(fixture, "the sample has 1892 tokens and gives 216 kinds", len(sample) == 1892 and kinds.Kind_Count(book) == 216)
+    Check(fixture, "a mark is its own kind", kinds.Kind_Of(book, ".") == 2 and kinds.Family_Of(book, 2) == kinds.MARK_KIND)
+    Check(fixture, "a number is known by how many digits it has",
+          kinds.Kind_Of(book, "7") == 5 and kinds.Kind_Of(book, "1704") == 8
+          and kinds.Kind_Of(book, "123456") == 8 and kinds.Figures_Of(book, 8) == 4)
+    Check(fixture, "a usual word is its own kind",
+          kinds.Kind_Of(book, "de") == 12 and kinds.Text_Of(book, 12) == "de" and kinds.Family_Of(book, 12) == kinds.WORD_KIND)
+    Check(fixture, "a word never seen still has a kind: its shape",
+          shape == 154 and kinds.Family_Of(book, shape) == kinds.SHAPE_KIND
+          and kinds.Text_Of(book, shape) == "es" and not kinds.Is_Capital(book, shape))
+    Check(fixture, "a capital letter makes another shape", kinds.Kind_Of(book, "Zaragoza") == 195 and kinds.Is_Capital(book, 195))
+    Check(fixture, "a mark never seen is unknown", kinds.Kind_Of(book, "@") == UNKNOWN)
+    first = kinds.Draw_Member(book, shape, dice)
+    second = kinds.Draw_Member(book, shape, dice)
+    third = kinds.Draw_Member(book, shape, dice)
+    Check(fixture, "words are drawn from those seen in a shape", first == "lugares" and second == "entonces" and third == "errores")
+
+
+def Test_Boxed_Oracles(fixture: Fixture) -> None:
+    belief = distributions.Zero(4)
+    distributions.Set_Weight(belief, 1, 0.1)
+    distributions.Set_Weight(belief, 2, 0.5)
+    distributions.Set_Weight(belief, 3, 0.3)
+    distributions.Set_Weight(belief, 4, 0.1)
+    allowed = [False] * 256
+    Check(fixture, "a rule that allows nothing is not applied",
+          distributions.Weight_Of(boxed_oracles.Kept_Part(belief, allowed), 2) == 0.5)
+    allowed[2] = True
+    allowed[3] = True
+    kept = boxed_oracles.Kept_Part(belief, allowed)
+    Check(fixture, "what is not allowed loses all its weight",
+          distributions.Weight_Of(kept, 1) == 0.0 and distributions.Weight_Of(kept, 4) == 0.0)
+    Check(fixture, "what is allowed keeps its proportions",
+          abs(distributions.Weight_Of(kept, 2) - 0.625) < 1.0e-12 and abs(distributions.Weight_Of(kept, 3) - 0.375) < 1.0e-12)
+    distributions.Set_Weight(belief, 2, 0.0)
+    distributions.Set_Weight(belief, 3, 0.0)
+    kept = boxed_oracles.Kept_Part(belief, allowed)
+    Check(fixture, "when the brain gives no chance to anything allowed, every allowed symbol is as good as another",
+          distributions.Weight_Of(kept, 2) == 0.5 and distributions.Weight_Of(kept, 3) == 0.5)
+
+
+def Check_Writer(fixture: Fixture, name: str, author: writers.Writer, length: int, checksum: int) -> None:
+    #-- Any writer, asked for about 10 words with the same dice, must give the same text as the Ada.
+    result = author.Write(random_sources.Seeded(3), 10)
+    Check(fixture, name, len(result) == length and Code_Sum(result) == checksum)
+
+
+def Test_Pyramids(fixture: Fixture) -> None:
+    letters = alphabets.Alphabet()
+    texts.Learn_Alphabet(PYRAMID_CORPUS, letters)
+    speller = counting_oracles.Counting_Oracle()
+    counting_oracles.Train(speller, texts.Read_Symbols(PYRAMID_CORPUS, letters), alphabets.Size(letters))
+    plan = pyramids.Pyramid()
+    pyramids.Study(plan, texts.Whole_Text(PYRAMID_CORPUS))
+    Check(fixture, "the pyramid decides 216 kinds from the sample", kinds.Kind_Count(plan.book) == 216)
+    Check_Writer(fixture, "the flat writer: one level, letters only", writers.Flat_Writer(speller, letters), 60, 178548)
+    Check_Writer(fixture, "the pyramid writer that spells: kinds first, then letters in boxes",
+                 writers.Pyramid_Writer(plan, speller, letters, pyramids.SPELL), 44, 90950)
+    Check_Writer(fixture, "the pyramid writer that picks: kinds first, then a word seen in that kind",
+                 writers.Pyramid_Writer(plan, speller, letters, pyramids.PICK), 44, 94546)
+
+
+def Test_Certainties(fixture: Fixture) -> None:
+    Check(fixture, "on the signed dial, +1 is right, 0 is no idea and -1 is wrong",
+          certainties.Certainty_Of(certainties.SURELY_RIGHT, 100) == 1.0
+          and certainties.Certainty_Of(certainties.NO_IDEA, 100) == certainties.Chance_Level(100)
+          and certainties.Certainty_Of(certainties.SURELY_WRONG, 100) == 0.0)
+    Check(fixture, "no idea is one chance in the size of the alphabet", abs(certainties.Chance_Level(100) - 0.01) < 1.0e-12)
+    Check(fixture, "half way up the signed dial is half way from no idea to right",
+          abs(certainties.Certainty_Of(0.5, 100) - 0.505) < 1.0e-12)
+    Check(fixture, "half way down the signed dial is half way from no idea to wrong",
+          abs(certainties.Certainty_Of(-0.5, 100) - 0.005) < 1.0e-12)
+    Check(fixture, "the two scales turn into each other and back",
+          abs(certainties.Signed_Of(0.505, 100) - 0.5) < 1.0e-12 and abs(certainties.Signed_Of(0.005, 100) + 0.5) < 1.0e-12)
+
+
+def Test_Anchored_Oracles(fixture: Fixture) -> None:
+    belief = distributions.Zero(4)
+    distributions.Set_Weight(belief, 1, 0.1)
+    distributions.Set_Weight(belief, 2, 0.5)
+    distributions.Set_Weight(belief, 3, 0.3)
+    distributions.Set_Weight(belief, 4, 0.1)
+    pulled = anchored_oracles.Pulled
+
+    def weight(anchor, symbol):
+        return distributions.Weight_Of(pulled(belief, anchor), symbol)
+
+    Check(fixture, "a sure memory pulls the opinion toward the symbol the cell had",
+          abs(weight(anchored_oracles.Anchor_Of(3, 0.9), 3) - 0.9204545454545453) < 1.0e-12)
+    Check(fixture, "a certainty of 1 keeps the symbol whatever the brain thinks", weight(anchored_oracles.Anchor_Of(3, 1.0), 3) == 1.0)
+    Check(fixture, "a certainty of 0 forbids the symbol and leaves the rest to the brain",
+          weight(anchored_oracles.Anchor_Of(3, 0.0), 3) == 0.0
+          and abs(weight(anchored_oracles.Anchor_Of(3, 0.0), 2) - 0.7142857142857143) < 1.0e-12)
+    Check(fixture, "no idea changes nothing: on the signed dial that is 0",
+          abs(weight(anchored_oracles.Signed_Anchor_Of(3, certainties.NO_IDEA, 4), 3) - 0.3) < 1.0e-12)
+    Check(fixture, "a free cell passes the opinion untouched", weight(anchored_oracles.Free_Anchor(), 2) == 0.5)
+    distributions.Set_Weight(belief, 3, 0.0)
+    Check(fixture, "sure of a symbol the brain denies: the memory decides alone", weight(anchored_oracles.Anchor_Of(3, 1.0), 3) == 1.0)
+
+
+def Settle_Text(speller, letters, symbols, anchors):
+    #-- Writes the symbols on a canvas, settles it, and gives back the text and the report.
+    board = settling.Written(symbols)
+    outcome = settling.Settle(board, speller, anchors)
+    final = [canvases.Symbol_At(board, position) for position in range(0, canvases.Length(board))]
+    return texts.Decoded(final, letters), outcome
+
+
+def Test_Settling(fixture: Fixture) -> None:
+    letters = alphabets.Alphabet()
+    texts.Learn_Alphabet(PYRAMID_CORPUS, letters)
+    size = alphabets.Size(letters)
+    speller = counting_oracles.Counting_Oracle()
+    counting_oracles.Train(speller, texts.Read_Symbols(PYRAMID_CORPUS, letters), size)
+    Check(fixture, "the alphabet of the sample has 51 symbols", size == 51)
+
+    symbols = texts.Encoded("En la boca vixen muchas bactemias.", letters)
+    result, outcome = Settle_Text(speller, letters, symbols, settling.Even_Anchors(symbols, certainties.Certainty_Of(0.99, size)))
+    Check(fixture, "two wrong letters nobody pointed at are found and mended",
+          result == "En la boca viven muchas bacterias." and outcome.passes == 2 and outcome.changes == 2 and outcome.is_settled)
+
+    anchors = settling.Even_Anchors(symbols, certainties.Certainty_Of(certainties.NO_IDEA, size))
+    result, outcome = Settle_Text(speller, letters, symbols, anchors)
+    Check(fixture, "with no idea of any letter the whole text is rewritten",
+          result == "ue se hacerse en muchos dos y la v" and outcome.passes == 7 and outcome.changes == 32 and outcome.is_settled)
+
+    symbols = texts.Encoded("En la boca vixen muchas bacterias.", letters)
+    anchors = settling.Even_Anchors(symbols, 1.0)
+    anchors[13] = anchored_oracles.Signed_Anchor_Of(symbols[13], certainties.SURELY_WRONG, size)
+    result, outcome = Settle_Text(speller, letters, symbols, anchors)
+    Check(fixture, "a letter marked surely wrong is the only one that changes",
+          result == "En la boca viven muchas bacterias." and outcome.changes == 1)
+
+    symbols = texts.Encoded("Los patos duermen mucho.", letters)
+    anchors = settling.Even_Anchors(symbols, certainties.Certainty_Of(0.5, size))
+    anchors[4] = anchored_oracles.Anchor_Of(symbols[4], 1.0)
+    result, outcome = Settle_Text(speller, letters, symbols, anchors)
+    Check(fixture, "a pinned letter stays where it was put while a looser neighbour moves",
+          result == "Los patos duermen muche." and outcome.changes == 1)
+
+
+def Test_Evidence(fixture: Fixture) -> None:
+    joined = certainties.Joined(0.5, 0.3)
+    together = certainties.Evidence_Of_Signed(0.5) + certainties.Evidence_Of_Signed(0.3)
+    Check(fixture, "evidence 0 is no idea on every scale",
+          certainties.Signed_From(0.0) == certainties.NO_IDEA and abs(certainties.Certainty_From(0.0, 100) - 0.01) < 1.0e-12)
+    Check(fixture, "the signed dial is the tanh of half the evidence", abs(certainties.Signed_From(2.0) - 0.7615941559557649) < 1.0e-12)
+    Check(fixture, "and back: 0.99 on the signed dial stands for 5.29 nats",
+          abs(certainties.Evidence_Of_Signed(0.99) - 5.293304824724491) < 1.0e-9)
+    Check(fixture, "a chance of one half among 100 symbols is 4.6 nats above pure chance",
+          abs(certainties.Evidence_Of_Certainty(0.5, 100) - 4.59511985013459) < 1.0e-9)
+    Check(fixture, "two sources join: their evidence adds, on either scale",
+          abs(certainties.Signed_From(together) - joined) < 1.0e-12 and abs(joined - 0.6956521739130435) < 1.0e-12)
+    Check(fixture, "joining with no idea changes nothing, and opposite certainties cancel",
+          certainties.Joined(0.5, certainties.NO_IDEA) == 0.5 and certainties.Joined(0.5, -0.5) == certainties.NO_IDEA
+          and certainties.Joined(certainties.SURELY_RIGHT, certainties.SURELY_WRONG) == certainties.NO_IDEA)
+    Check(fixture, "the curved model keeps the three fixed points of the dial",
+          certainties.Certainty_By(certainties.SURELY_RIGHT, 100, certainties.CURVED) == 1.0
+          and certainties.Certainty_By(certainties.SURELY_WRONG, 100, certainties.CURVED) == 0.0
+          and abs(certainties.Certainty_By(certainties.NO_IDEA, 100, certainties.CURVED) - 0.01) < 1.0e-12)
+    Check(fixture, "between them the models differ: 0.5 is a chance of 0.505 when straight and 0.029 when curved",
+          abs(certainties.Certainty_By(0.5, 100, certainties.STRAIGHT) - 0.505) < 1.0e-12
+          and abs(certainties.Certainty_By(0.5, 100, certainties.CURVED) - 0.029411764705882366) < 1.0e-9)
+
+
+def Test_Vectors(fixture: Fixture) -> None:
+    before = [1.0, 0.0, 0.0, 0.0]
+    after = [0.0, 0.0, 1.0, 0.0]
+    mixed = [1.0, 0.0, 0.0, 1.0]
+    other = [1.0, 0.0, 1.0, 0.0]
+    low = [1.0, 2.0, 3.0]
+    high = [4.0, 5.0, 6.0]
+    flat = [3.0, 4.0]
+    Check(fixture, "the dot product multiplies place by place and adds", vectors.Dot(low, high) == 32.0)
+    Check(fixture, "adding and scaling work place by place",
+          vectors.Added(low, vectors.Scaled(2.0, high)) == [9.0, 12.0, 15.0] and vectors.Subtracted(high, low) == [3.0, 3.0, 3.0])
+    Check(fixture, "the length of (3, 4) is 5", vectors.Length(flat) == 5.0)
+    Check(fixture, "the unit arrow has length 1", abs(vectors.Length(vectors.Unit(flat)) - 1.0) < 1.0e-12)
+    Check(fixture, "arrows at a right angle have cosine 0, opposite arrows -1, the same arrow +1",
+          vectors.Cosine(before, after) == 0.0
+          and abs(vectors.Cosine(flat, vectors.Scaled(-1.0, flat)) + 1.0) < 1.0e-12
+          and abs(vectors.Cosine(flat, vectors.Scaled(2.0, flat)) - 1.0) < 1.0e-12)
+    Check(fixture, "the complex product: its real part is the dot product",
+          vectors.Complex_Product(mixed, other).real == 1.0 and vectors.Complex_Product(mixed, other).imag == 1.0)
+    Check(fixture, "its imaginary part changes sign when the two are swapped: it holds order",
+          vectors.Complex_Product(before, after).imag == 1.0 and vectors.Complex_Product(after, before).imag == -1.0)
+    Check(fixture, "the turn is +90 degrees one way, -90 the other, and 45 half way",
+          abs(vectors.Turn(before, after) - 90.0) < 1.0e-9 and abs(vectors.Turn(after, before) + 90.0) < 1.0e-9
+          and abs(vectors.Turn(mixed, other) - 45.0) < 1.0e-9)
+
+
+SAVANNA = "Lions eat zebras. Lions eat antelopes. Zebras eat grass. Antelopes eat grass. Gazelles eat grass."
+#-- Five small sentences in which two animals keep exactly the same company.
+
+
+def Test_Company(fixture: Fixture) -> None:
+    sample = tokens.Split(SAVANNA)
+    book = kinds.Built(sample)
+    options = company.Settings()
+    options.every_word = True
+    table = company.Built(sample, book, options)
+
+    def cosine(left, right):
+        return vectors.Cosine(company.Vector_Of(table, left), company.Vector_Of(table, right))
+
+    Check(fixture, "six words, each described by 44 counts",
+          company.Row_Count(table) == 6 and len(company.Vector_At(table, 1)) == 44
+          and company.Word_At(table, 1) == "lions" and company.Seen_At(table, 2) == 5)
+    Check(fixture, "zebras and antelopes keep the same company: cosine 1", abs(cosine("zebras", "antelopes") - 1.0) < 1.0e-12)
+    Check(fixture, "lions and grass keep none in common: cosine 0, and a turn of 90 degrees says they stand on opposite sides",
+          cosine("lions", "grass") == 0.0
+          and abs(vectors.Turn(company.Vector_Of(table, "lions"), company.Vector_Of(table, "grass")) + 90.0) < 1.0e-9)
+    Check(fixture, "a capital does not make another word, and a word seen once looks like the one it was seen like",
+          abs(cosine("Gazelles", "Lions") - 0.9753386489714635) < 1.0e-9)
+    options = company.Settings()
+    options.every_word = True
+    options.reach = 2
+    options.context = company.AS_WORDS
+    table = company.Built(sample, book, options)
+    Check(fixture, "looking two words each way, with neighbours counted as words: 1024 counts for each word",
+          len(company.Vector_At(table, 1)) == 1024 and abs(cosine("zebras", "antelopes") - 0.75) < 1.0e-9)
+    Check(fixture, "the scrambled number of a word", company.Hash_Of("zebras") == 2311424180)
+
+
+def Test_Axes_And_Groups(fixture: Fixture) -> None:
+    sample = tokens.Split(SAVANNA)
+    book = kinds.Built(sample)
+    options = company.Settings()
+    options.every_word = True
+    table = company.Built(sample, book, options)
+    basis = axes.Found(table.rows, 2)
+    points = [axes.Projected(basis, row) for row in table.rows]
+    Check(fixture, "two axes of length 1, at right angles",
+          len(basis.axes) == 2 and abs(vectors.Length(basis.axes[0]) - 1.0) < 1.0e-9
+          and abs(vectors.Length(basis.axes[1]) - 1.0) < 1.0e-9 and abs(vectors.Dot(basis.axes[0], basis.axes[1])) < 1.0e-9)
+    Check(fixture, "44 counts become 2 numbers, and words of the same company land on the same spot",
+          len(points[0]) == 2 and abs(points[0][0] + 0.39642464446861586) < 1.0e-6
+          and abs(points[2][0] - points[3][0]) < 1.0e-9 and abs(points[2][1] - points[3][1]) < 1.0e-9)
+    Check(fixture, "three groups from the two numbers: zebras and antelopes together, lions with gazelles",
+          groups.Grouped(points, 3) == [1, 3, 2, 2, 3, 1])
+    whole = groups.Grouped(table.rows, 3)
+    Check(fixture, "three groups from all 44 counts: zebras and antelopes are still together",
+          whole[2] == 2 and whole[3] == 2 and whole[4] == 3 and whole[0] == 1)
+
+
+def Check_Word_Exam(fixture: Fixture, name: str, options: kind_makers.Settings, count: int, right: int) -> None:
+    #-- Studies nine tenths of the sample with the kinds decided as `options` says, and gives the exam on the rest.
+    whole = texts.Whole_Text(PYRAMID_CORPUS)
+    cut = (len(whole) * 9) // 10
+    plan = pyramids.Pyramid()
+    pyramids.Study(plan, whole[:cut], options)
+    outcome = word_exams.Exam(plan, tokens.Split(whole[:cut]), tokens.Split(whole[cut:]), 3)
+    Check(fixture, name, kinds.Kind_Count(plan.book) == count and outcome.asked == 56 and outcome.right == right)
+
+
+def Test_Kind_Makers(fixture: Fixture) -> None:
+    options = kind_makers.Settings()
+    Check_Word_Exam(fixture, "kinds by shape: 216 kinds, 18 of 56 hidden words rebuilt", options, 216, 18)
+    options.way = kind_makers.BY_COMPANY
+    options.axes = 4
+    options.rounds = 5
+    options.groups = 12
+    Check_Word_Exam(fixture, "kinds by company, 4 axes and 12 groups: 148 kinds, 17 of 56", options, 148, 17)
+    options.axes = 3
+    options.rounds = 3
+    options.company.reach = 2
+    options.company.context = company.AS_WORDS
+    options.company.fold_case = False
+    Check_Word_Exam(fixture, "neighbours counted as words, two each way, capitals kept: 148 kinds, 17 of 56", options, 148, 17)
+
 
 def Main() -> None:
     fixture = Fixture()
@@ -690,6 +1022,18 @@ def Main() -> None:
         ("Pages", Test_Pages),
         ("Site rules", Test_Robots),
         ("Web source", Test_Web_Sources),
+        ("Tokens", Test_Tokens),
+        ("Kinds of token", Test_Kinds),
+        ("Boxed oracle", Test_Boxed_Oracles),
+        ("Pyramid and writers", Test_Pyramids),
+        ("The dial", Test_Certainties),
+        ("Anchored oracle", Test_Anchored_Oracles),
+        ("Settling", Test_Settling),
+        ("Evidence and the curved dial", Test_Evidence),
+        ("Vectors", Test_Vectors),
+        ("The company a word keeps", Test_Company),
+        ("Main axes and groups", Test_Axes_And_Groups),
+        ("Ways of deciding kinds", Test_Kind_Makers),
         ]
     for title, group in groups:
         print(title)

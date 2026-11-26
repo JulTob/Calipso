@@ -283,6 +283,206 @@ The brain with a counting neuron packs better because its table is all small
 whole numbers, which take one or two bytes each. Votes are real numbers, and
 those take eight bytes however they are written.
 
+## E11. The pyramid: kinds of word first, then letters
+
+*Question.* The flat method looks left and right at letters. Can a level above,
+that decides the **kind** of each word before any letter, do better?
+
+*How.* `reference/experiments/pyramid_exam.py` on the English book (558,068
+letters). The first nine tenths are studied, the last tenth never. The letter
+brain is the counting one (windows up to 7 letters). The level of kinds counts
+runs of up to 5 kinds. 253 kinds were decided.
+
+**Part A. Rebuild a hidden word in text never studied** (1,082 words, the
+length is known, the most likely choice is always taken):
+
+| Method | The exact word | A word of the right kind |
+|---|---|---|
+| flat: the letter brain fills the letters | 19.4 % | 32.1 % |
+| spell: the kind is decided first, then the letter brain fills its box | 29.8 % | 43.6 % |
+| pick: the kind is decided first, then its most usual word is taken | 32.2 % | 39.4 % |
+
+**Part B. Free writing** (60 texts each; a word "exists" if it is in the
+studied text; a pair is "seen" if those two words stand together in it):
+
+| Who writes | Words that exist | Pairs of neighbours seen |
+|---|---|---|
+| real text never studied | 92.4 % | 56.2 % |
+| flat | 97.3 % | 72.9 % |
+| spell | 70.7 % | 45.3 % |
+| pick | 100.0 % | 56.1 % |
+
+Examples, same dice:
+
+    flat   bility. / I illuminated with with equal, so as to beyond there emerge, make use of those Proposition of the Colour
+    spell  Sthas is much uplained to blue, but those which usuffice for anymon celes, and therefore thered the Paper Ver.
+    pick   Flame is much appeared to blue, but those which violence for become edges, and therefore marked the Paper Ray.
+
+*What it says.*
+
+1. **Deciding the kind first helps where it should.** Ten more hidden words in
+   every hundred come back exact, and the kind of word is right more often.
+2. **The joint between levels is the weak point.** Free, the letter brain
+   writes real words 97 % of the time. Ordered to fill a box of fixed size and
+   ending, it does so far less ("uplained", "usuffice"). An order from above is
+   only as good as the level below can obey it.
+3. **Flat writing looks better than it is.** 73 % of its pairs of neighbours
+   were seen in the studied text; real text never studied has 56 %. Flat
+   writing stitches pieces it remembers. The pyramid that picks words sits at
+   56 %, like real text, but its neighbours are odd ("which violence for
+   become edges"): the kinds know shape, not meaning.
+4. **Kinds by shape are crude.** Size and ending do not tell a verb from a
+   noun. The next step is kinds learned from the company a word keeps.
+
+## E12. The dial: can soft cells find and mend a wrong letter?
+
+*Question.* Until now a cell was Given (it cannot change) or Blank (nothing is
+known). With a certainty in between, can a text settle around a change, and can
+the brain find a wrong letter nobody pointed at?
+
+*How.* `reference/experiments/settling_exam.py` on the English book. 300 pieces
+of 80 letters from the tenth never studied; in each, one small letter is
+replaced by another. The alphabet has 91 symbols, so "no idea" is a certainty
+of 1/91 = 0.011.
+
+**Part A. Nobody says where the wrong letter is.** Every cell gets the same
+certainty and the text is read until it settles.
+
+| Signed dial | The same as a chance | Wrong letter mended | Right letters spoiled, in every 100 |
+|---|---|---|---|
+| 0 (no idea) | 0.011 | 21.0 % | 34.78 |
+| 0.5 | 0.506 | 49.7 % | 6.01 |
+| 0.9 | 0.901 | 63.0 % | 2.83 |
+| 0.99 | 0.990 | 70.0 % | 1.40 |
+| 0.999 | 0.999 | 71.7 % | 0.74 |
+| 0.9999 | 0.9999 | 70.0 % | 0.36 |
+
+**Part B. The wrong cell is marked, every other cell is certain.**
+
+| How the wrong cell is marked | Right letter back |
+|---|---|
+| no idea (0): the same as a hole | 85.0 % |
+| surely wrong (-1) | 85.0 % |
+
+*What it says.*
+
+1. **The dial works, and it does something the engine could not do before.**
+   With every letter held at 0.99 or more, the brain finds and mends about 70 %
+   of wrong letters it was never told about, and spoils about one right letter
+   in a hundred.
+2. **The dial must be set high.** At 0.5 one right letter in seventeen is
+   spoiled. A certainty of one half sounds neutral and is not: neutral is 1/91.
+   This is the case for the signed scale, where neutral is always 0.
+3. **"Surely wrong" added nothing here.** Telling the brain "not this letter"
+   is free information only when the brain might have chosen that letter. A
+   random wrong letter is never its choice, so -1 and a plain hole give the
+   same 85 %. The negative half needs a harder exam: wrong letters that look
+   right ("form" for "from").
+4. **Part of the "spoiled" letters are words the brain never met.** The text
+   is unseen, and a rare word looks like a mistake to a brain that counts.
+
+## E13. Sigmoid or tanh, cosine as truth, and a complex product
+
+*Question.* Four options were on the table: neurons whose votes are bounded by
+tanh; kinds decided by the company a word keeps; the cosine as a truth level
+from -1 to 1; a complex dot product. Which are worth building?
+
+*How.* Quick prototypes on the English book. The first uses the reference
+brain with two steps replaced; the others use a numeric library and are not
+in the repository. They are measurements to decide what to build, not
+finished code.
+
+**Votes bounded by tanh** (brain `bias+position+decay`, 2000 lessons; each
+neuron's vote passes through `bound * tanh (vote / bound)` before the sum):
+
+| Votes | Right at 15 % hidden | at 50 % | at 85 % | Surprise at 15 % |
+|---|---|---|---|---|
+| plain sum | 43.4 % | 34.1 % | 24.4 % | 2.139 nats |
+| tanh, bound 4 nats | 42.6 % | 34.6 % | 24.0 % | 2.123 nats |
+| tanh, bound 2 nats | 42.3 % | 33.8 % | 23.3 % | 2.181 nats |
+
+**Kinds by company** (hidden-word exam of E11, the "pick" handover; every word
+that is not its own kind is described by 472 counts of the kinds around it,
+reduced to its main axes, then grouped):
+
+| Kinds decided by | Hidden word rebuilt exactly |
+|---|---|
+| shape (what is built) | 32.2 % |
+| company, 8 axes | 33.1 % |
+| company, 24 axes | 34.3 % |
+| company, 60 axes | 36.2 % |
+| company, all 472 numbers | 35.5 % |
+
+**The cosine as truth.** Plain cosines between words run from 0 to 1. After
+removing the average word, the most opposite words to "Telescope" are
+"outmost", "next", "exterior" at -0.23; to "easily" they are "point", "Sine",
+"bottom" at -0.30.
+
+**The complex product.** For "thicker" the nearest words by the real part are
+"convex", "broader", "larger", "rarer", all at an angle within 4 degrees of 0.
+The words with the largest imaginary part sit at 40 to 90 degrees and are of
+another kind ("cannot", "know", "It" one way; "grey", "nine", "Bubbles" the
+other).
+
+*What it says.*
+
+1. **tanh on the neurons buys nothing here.** With a generous bound the brain
+   is the same within noise; with a tight one it is slightly worse. Not built.
+2. **Company beats shape by about four points, and 60 axes do as well as all
+   472 numbers.** Worth building. On 1,082 words the gap is suggestive, not
+   proof.
+3. **The cosine is likeness, not truth.** Its negative side means "another
+   grammatical role", and opposites in meaning look alike.
+4. **The imaginary part separates "replaces" from "stands next to".** The
+   pairs are too rare in this book to confirm it by direct counting.
+
+## E14. Kinds by company, with the modules
+
+*Question.* E13 tried kinds by company with borrowed tools. Do the modules
+built for it (Company, Axes, Groups, Kind_Makers) give the same gain, and
+which settings matter?
+
+*How.* The exam of `Calipso.Word_Exams` on the English book: the first nine
+tenths studied, one word in nine of the rest hidden (1,082 words), the answer
+is the most usual studied word of that length in the most likely kind. The
+figures come from the reference modules with their vector sums done by a
+numeric library, because the plain reference would take hours on a whole book
+and the Ada cannot be run where this was written. On small texts the build
+checks that the Ada program writes exactly what the reference writes.
+
+| Kinds decided by | Hidden word rebuilt exactly |
+|---|---|
+| shape | 32.2 % |
+| company, 8 axes | 32.9 % |
+| company, 24 axes | 33.6 % |
+| company, 60 axes | **35.9 %** |
+| company, every count (no axes) | 35.1 % |
+| company, 60 axes, capitals kept apart | 34.9 % |
+| company, 60 axes, two tokens each way | 33.5 % |
+| company, 60 axes, neighbours as words | 33.1 % |
+| company, 60 axes, neighbours as words, two tokens each way | 33.3 % |
+
+Every row by company has 80 groups and 235 kinds in all, the same number of
+kinds as the book by shape.
+
+*What it says.*
+
+1. **The modules reproduce the gain**: 35.9 % against 32.2 %, close to the
+   36.2 % of E13.
+2. **60 numbers do as well as all 472.** The step that shortens the vectors
+   costs nothing in quality. With too few axes (8) the gain is lost. The
+   default is now 60.
+3. **Folding capitals is worth one point.** "The" and "the" keep the same
+   company and should be counted together.
+4. **Looking further, or counting neighbours as words, does not help this
+   exam.** The exam asks for the kind of a word from four neighbours on each
+   side, which is a question of grammar, and the nearest neighbour counted as
+   a kind answers it best. The finer settings are for groups by meaning, which
+   this exam does not reward and this book is too small to show.
+5. **The lions.** On five sentences (`tests/data/savanna.txt`) zebras and
+   antelopes come out with cosine 1.000, lions and grass with 0, and their
+   turn of 90 degrees says they stand on opposite sides of the same word.
+
 ## Summary
 
 | Part of the idea | Does it hold? |
@@ -295,4 +495,7 @@ those take eight bytes however they are written.
 | Fourier and Laplace as ways of looking | Laplace (fading with distance) comes within 3 or 4 points of exact positions with a third of the numbers. Fourier (waves) did not help as built. |
 | Memory of a fixed size | Yes, once each counter knows whose it is. |
 | Brains that are small to store and send | Yes: packed, four to six times smaller, nothing lost. |
+| A level above the letters (the pyramid) | Partly. Deciding the kind of word first rebuilds a hidden word better (19 % to 30 %). Free writing does not improve yet: the letter level cannot obey its boxes well, and kinds by shape are crude. |
+| Cells that are neither fixed nor empty (the dial) | Yes. A text settles around a change, and about 70 % of wrong letters nobody pointed at are mended, at the price of one right letter in a hundred. |
+| Kinds from the company a word keeps | Yes, a little: 35.9 % of hidden words against 32.2 % by shape, and 60 numbers a word are enough. |
 | Text with meaning | **Not yet.** It is the limit of these brains, not of the engine. |

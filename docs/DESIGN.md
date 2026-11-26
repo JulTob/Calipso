@@ -233,7 +233,10 @@ never needs the whole text at once, so a source can be far bigger than memory.
 `Calipso.Web_Sources` keeps a list of addresses to visit. For each one:
 
 1. it asks the site's rules (`Calipso.Robots`, the site's `robots.txt`)
-   whether the address may be fetched;
+   whether the address may be fetched. This is asked twice: **at the door**,
+   before the address takes a seat in the list, and again when its turn comes.
+   The rules of a site are fetched once and remembered, so the second question
+   is free. An address the rules close never waits in the list;
 2. it waits, if the last request was too recent;
 3. it fetches the address (`Calipso.Fetchers`) and checks what really arrived;
 4. it takes the words of the page (`Calipso.Pages`) to hand out in pieces;
@@ -498,6 +501,259 @@ with the mirror only leave a note, because different rounding between
 machines can change a draw without anything being wrong.
 
 The web server and the panel exist only in Ada.
+
+## 13. A second method: the pyramid
+
+The flat method sees one level, letters. A window of seven letters knows how
+words are spelled but not how a sentence is built.
+
+The pyramid adds a level above. Each level has cells of its own:
+
+| Level | A cell holds | Package |
+|---|---|---|
+| kinds | the **kind** of one token | `Calipso.Kinds`, `Calipso.Tokens` |
+| letters | one letter | everything that was already there |
+
+**Tokens.** `Calipso.Tokens` cuts a text into the pieces a reader takes whole:
+words, numbers, single marks, and paragraph breaks (a blank line).
+
+**Kinds.** `Calipso.Kinds` gives every token a kind. A mark is its own kind.
+A number is known by how many digits it has. The 120 most usual words are each
+their own kind. Any other word is known by its *shape*: capital or not, one of
+four sizes, and one of the ten most usual two-letter endings (or none). That
+is at most 253 kinds, so **a kind fits in a `Symbol`**. This is the decision
+that keeps the design small: canvases, oracles, the collapse engine and the
+counting brain work on kinds without one line changed.
+
+**The handover.** A decision of one level is the template of the level below.
+`Calipso.Pyramids` collapses a canvas of kinds (the plan), then turns it into a
+canvas of letters:
+
+- a mark or a usual word is written as given letters;
+- any other word becomes a **box**: holes for its letters, with the ending of
+  its kind already given;
+- every hole carries a *permission*: small letters only, a capital only,
+  digits only.
+
+`Calipso.Boxed_Oracles` is what makes the level below obey. It is an oracle
+that asks another oracle for its opinion and removes what the cell does not
+allow. The engine does not know it is there.
+
+There are two handovers. **Spell**: the letter brain fills the box. **Pick**:
+a word seen in that kind is taken whole, drawn by how often it was seen.
+
+**Either method.** `Calipso.Writers` is the contract: `Write (Dice, Words,
+Result)`. `Flat_Writer` and `Pyramid_Writer` both keep it, and a program that
+holds a `Writer'Class` does not know which one it has. A third method is one
+more type.
+
+What was measured (E11) and what it teaches:
+
+- Deciding the kind first is a real gain when a hidden word must be rebuilt in
+  text never studied: from 19 % to 30 % exact.
+- **An order from above is only as good as the level below can obey it.** A
+  letter brain that writes real words 97 % of the time when free writes them
+  far less often inside a box of fixed size and ending.
+- Kinds by shape are crude. "becomes" and "Colours" have the same shape and
+  are not the same kind of word.
+
+What comes next on this path: kinds learned from the company a word keeps
+(two words are the same kind if the same kinds stand around them); a level
+above sentences (paragraph, heading, list) so the shape of a page is planned
+too; and filling a hole of free length with the pyramid, which needs reading
+the surroundings bottom-up before planning top-down.
+
+## 14. The dial: cells that are neither fixed nor empty
+
+A cell used to have two states that matter: **Given** (it cannot change) and
+**Blank** (nothing is known about it). The dial puts every position in between.
+
+**One dial, two scales** (`Calipso.Certainties`):
+
+| | surely wrong | no idea | surely right |
+|---|---|---|---|
+| `Certainty`, a chance | 0 | 1/N | 1 |
+| `Signed_Certainty` | -1 | 0 | +1 |
+
+On the first scale "no idea" depends on N, the number of symbols: 0.011 for 91
+letters, 0.004 for 253 kinds. On the signed scale it is always 0. That is why
+the signed scale is the better one to *declare* a dial with, and the chance is
+the better one to *calculate* with. `Certainty_Of` and `Signed_Of` turn one
+into the other; each half of the signed scale is a straight line.
+
+**The anchored oracle** (`Calipso.Anchored_Oracles`). A cell remembers the
+symbol it had and how sure it was. The memory is turned into weights (the
+certainty for the symbol held, the rest shared among the others), multiplied
+by the brain's opinion, and scaled to add up to 1. So:
+
+- certainty 1 keeps the symbol whatever the brain says: a Given cell;
+- certainty 1/N leaves the opinion as it was: a Blank cell;
+- certainty 0 forbids the symbol: "anything but this", which is new.
+
+Given and Blank are the two ends of the dial, not a separate mechanism. In
+between, the certainty is a **price**: how strongly the neighbours must
+disagree before the cell changes. With 91 symbols a cell held at 0.5 changes
+only when the brain finds another symbol about 90 times more likely.
+
+**Settling** (`Calipso.Settling`). The text is read from left to right. Each
+cell decides again from its neighbours *as they are now* and from its anchor,
+and takes the most likely symbol. The text is read again until a whole reading
+changes nothing. That text is a fixed point of the reading. A pinned change is
+an anchor that is certain of the new symbol; a cell marked "surely wrong" has
+certainty 0. The number of readings is capped (8), so it always ends.
+
+Why not empty the cells and collapse them as usual? Because an empty cell
+tells its neighbours nothing. Here every cell keeps speaking to its neighbours
+while it waits to be read again, so the old text is context, not only a
+preference.
+
+What was measured is in E12. What this does not do yet:
+
+- It works on one level. Settling the *kinds* and writing the letters again
+  below them (loose kinds, stiff letters) needs the two levels joined.
+- The length never changes. A word cannot become a longer word.
+- **A dial of meaning.** "The cat is on the sofa" and "On top of the sofa
+  there is a kitten" should point to the same state. Nothing here knows that:
+  kinds by shape do not even put "cat" and "kitten" together. It needs kinds
+  learned from the company words keep, and then a level whose symbols do not
+  care about word order. That level is the real target of the pyramid.
+- **Cuts that are not decided.** A level that chunks must choose where the
+  cuts go, and a text can be cut in more than one way. Instead of choosing,
+  every window of the text can be given a kind, overlapping its neighbours,
+  the way the counting brain already looks at every run of letters. No cut is
+  ever made; spaces and commas are symbols like the rest, and whether they
+  matter is learned.
+
+## 15. Three scales for one dial, and an algebra for words
+
+### Evidence, the sigmoid and tanh
+
+Section 14 gave the dial two scales. There is a third, and it is the one the
+others come from (`Calipso.Certainties`):
+
+| Scale | Range | No idea | What it is |
+|---|---|---|---|
+| `Evidence` | any number, in nats | 0 | how far the odds have moved |
+| `Signed_Certainty` | -1 .. 1 | 0 | tanh (evidence / 2) |
+| `Certainty` | 0 .. 1 | 1/N | sigmoid (evidence + the evidence of pure chance) |
+
+tanh and the sigmoid are the same curve on two rulers: `tanh (x/2) = 2 *
+sigmoid (x) - 1`. So "0..1 with sigmoids" and "-1..1 with tanh" are one model
+seen twice, not two.
+
+What makes evidence the scale to calculate with: **evidence from two sources
+adds**. On the signed dial that sum is the operator `&`:
+
+    a & b = (a + b) / (1 + a * b)
+
+`No_Idea` changes nothing, opposite certainties cancel, and joining then
+converting gives the same as converting then adding. A brain already works
+this way: its neurons add scores, which are evidence, and the last step
+(`From_Scores`) is the sigmoid for many symbols at once.
+
+The dial now has two models (`Dial_Model`): `Straight`, where each half of the
+signed dial is a straight line, and `Curved`, where the dial is the tanh of
+half the evidence. Both agree at -1, 0 and +1. In between they are far apart.
+The position that worked best in E12 reads like this:
+
+| Straight dial | As a chance | As evidence | Curved dial |
+|---|---|---|---|
+| 0.5 | 0.506 | 4.5 nats (6.5 bits) | 0.978 |
+| 0.99 | 0.990 | 9.1 nats (13 bits) | 0.99978 |
+| 0.999 | 0.999 | 11.4 nats (16.5 bits) | 0.99998 |
+
+The curved dial is the right algebra and a poor ruler to set by hand: all the
+useful positions crowd against 1. **Bits are the readable unit**: "hold this
+letter with 13 bits".
+
+### Vectors, the cosine and the complex product
+
+`Calipso.Vectors` is the algebra for describing a word by numbers: `+`, `-`,
+scaling, the dot product (`*`), length, the unit arrow and the cosine.
+
+The cosine runs from -1 to 1 like the signed dial, and it is tempting to read
+it as truth. Measured on words described by their company (E13), it is not:
+
+- Counts cannot be negative, so plain cosines never go below 0. Nothing is
+  ever "opposite".
+- After taking the average word away, the most opposite words are words of
+  another grammatical role (a noun against adjectives), at about -0.25. Never
+  near -1, and never "false".
+- Words of opposite meaning keep the same company. "Thicker" and "rarer" come
+  out as near neighbours.
+
+So the signed scale is the right *container* for truth, and company is not
+what fills its negative half. "A dog is a reptile" needs evidence against,
+and counting neighbours never says "not".
+
+The complex product. With the ordinary angle between two arrows, `cos + i sin`
+adds nothing: the sine is fixed by the cosine. It becomes useful when the two
+halves of a vector mean different things. A word's company has two halves,
+what stands before it and what stands after it. Read as `before + i * after`:
+
+- the real part of the product of two words is the plain dot product: can one
+  replace the other?
+- the imaginary part is one word's "before" against the other's "after", both
+  ways, subtracted. Swap the two words and it changes sign. It holds **order**.
+
+The angle of the product (`Turn`) then says which relation two words have:
+near 0 degrees they replace each other ("thicker", "broader", "larger"); near
++90 or -90 one stands where the other's neighbours stand. This is the general
+rule behind the idea: a real dot product forgets order, a complex one keeps it
+as a phase. Meaning that should not depend on word order is the part with the
+phase thrown away.
+
+`Calipso.Vectors` is the base of the next section.
+
+## 16. Kinds decided by company: a chain of modules
+
+Section 13 decided the kind of an unusual word by its looks. This section
+decides it by the company the word keeps. It is built as a chain, one package
+for each step, so that any step can be changed or replaced:
+
+| Step | Package | What it does | What can be set |
+|---|---|---|---|
+| 1 | `Calipso.Company` | each word becomes a vector: the counts of what stands around it | the reach; what a neighbour counts as; capitals; softening |
+| 2 | `Calipso.Axes` | the vectors are told by a few numbers along their main axes | how many axes (0 skips the step); how long to search |
+| 3 | `Calipso.Groups` | near vectors are put into groups | how many groups; how many passes |
+| 4 | `Calipso.Kinds` | each group becomes a kind of the book | |
+
+`Calipso.Kind_Makers` runs the chain and is where the choice is made:
+`By_Shape` or `By_Company`. Both give a `Book`, so the pyramid, the writers and
+the dial do not know which one they have. `Pyramids.Study` takes the settings.
+
+**What "company" means** is the first setting. A neighbour can count as its
+*kind* (usual words as themselves, the rest by shape): coarse, and what comes
+out is grammar. Or it can count as the *word* it is, hashed into a fixed
+number of buckets so that memory stays bounded: finer, and what comes out is
+closer to meaning ("things that eat grass"). The same code does both.
+
+**The main axes** are found by repeated stretching: take any arrow, let every
+vector pull it toward itself as hard as the two agree, make it of length 1,
+and repeat. It turns toward the direction in which the cloud of vectors is
+widest. Only sums and products are needed, no library. Later axes are found
+the same way with the earlier ones removed.
+
+**Groups.** A group behaves as a shape: it has members, and a word can be
+drawn from it. So `Pick` works unchanged. `Spell` works too, with one loss: a
+group does not know whether its words start with a capital.
+
+A book has room for 255 kinds. Marks, numbers and the 120 usual words take
+their places first, eight plain shapes are kept for words never met, and the
+groups take what is left (80 with a full set of marks).
+
+**The exam** (`Calipso.Word_Exams`, program `calipso_kinds exam`) hides words
+in text never studied and counts how often the level of kinds gets them back.
+It is the judge for every choice in this chain. `calipso_kinds alike` shows
+the cosine and the turn between any two words.
+
+What was measured is in E14. What the chain does not do yet:
+
+- The levels are still two. A level that works on windows of kinds, with no
+  cuts, is the next module.
+- The judge is one exam. Compression (does this book describe the text in
+  fewer bits?) is the more general judge and is not built.
+- Rows are kept whole in memory: fine for a book, too much for a library.
 
 ## Reading
 

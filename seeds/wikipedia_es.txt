@@ -1,0 +1,6 @@
+# Wikipedia in Spanish. Use with under=/wiki/ so the robot stays among the articles.
+https://es.wikipedia.org/wiki/Ciencia
+https://es.wikipedia.org/wiki/Historia
+https://es.wikipedia.org/wiki/Literatura
+https://es.wikipedia.org/wiki/Geograf%C3%ADa
+https://es.wikipedia.org/wiki/Matem%C3%A1ticas
